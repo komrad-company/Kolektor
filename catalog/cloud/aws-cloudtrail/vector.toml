@@ -46,9 +46,9 @@ source = '''
     # User identity
     user_identity = object(.userIdentity) ?? {}
     user_type = to_string!(user_identity.type)
-    user_arn = to_string(user_identity.arn)
+    user_arn = to_string!(user_identity.arn)
     user_name = user_identity.userName
-    account_id = to_string(user_identity.accountId)
+    account_id = to_string!(user_identity.accountId)
 
     # Service name from eventSource (e.g. "ec2.amazonaws.com" → "ec2")
     service_name = replace(event_source, r'\.amazonaws\.com$', "")
@@ -66,7 +66,7 @@ source = '''
         "name": service_name
       },
       "request": {
-        "uid": to_string(.requestID)
+        "uid": to_string!(.requestID)
       },
       "response": {
         "error":         error_code,
@@ -84,16 +84,16 @@ source = '''
     }
 
     .src_endpoint = {
-      "ip": to_string(.sourceIPAddress)
+      "ip": to_string!(.sourceIPAddress)
     }
 
     .http_request = {
-      "user_agent": to_string(.userAgent)
+      "user_agent": to_string!(.userAgent)
     }
 
     .cloud = {
       "provider": "AWS",
-      "region":   to_string(.awsRegion),
+      "region":   to_string!(.awsRegion),
       "account_uid": account_id
     }
 
@@ -102,16 +102,16 @@ source = '''
         "name":        "CloudTrail",
         "vendor_name": "AWS"
       },
-      "version": to_string(.eventVersion),
-      "uid":     to_string(.eventID)
+      "version": to_string!(.eventVersion),
+      "uid":     to_string!(.eventID)
     }
 
     .unmapped = {
-      "event_type":          to_string(.eventType),
-      "event_category":      to_string(.eventCategory),
+      "event_type":          to_string!(.eventType),
+      "event_category":      to_string!(.eventCategory),
       "management_event":    .managementEvent,
       "read_only":           .readOnly,
-      "recipient_account_id": to_string(.recipientAccountId)
+      "recipient_account_id": to_string!(.recipientAccountId)
     }
   } else {
     .class_uid    = 0
