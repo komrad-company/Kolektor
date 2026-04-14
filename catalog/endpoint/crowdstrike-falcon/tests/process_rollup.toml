@@ -6,7 +6,7 @@ insert_at = "parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = '{"metadata":{"eventType":"ProcessRollup2","eventCreationTime":1713091500000,"customerIDString":"abc123","eventId":"evt-002"},"ComputerName":"WS01","UserName":"CORP\\\\jdoe","ImageFileName":"powershell.exe","CommandLine":"powershell.exe -enc SQBFAFgA","ProcessId":4567,"ParentImageFileName":"explorer.exe","ParentProcessId":1234,"SHA256String":"e5f6a1b2c3d4","LocalIP":"10.0.0.50","ProcessStartTime":1713091500000}'
+  message = '{"metadata":{"eventType":"ProcessRollup2","eventCreationTime":1713091500000,"customerIDString":"abc123","eventId":"evt-002"},"ComputerName":"WS01","UserName":"CORP\\jdoe","ImageFileName":"powershell.exe","CommandLine":"powershell.exe -enc SQBFAFgA","ProcessId":4567,"ParentImageFileName":"explorer.exe","ParentProcessId":1234,"SHA256String":"e5f6a1b2c3d4","LocalIP":"10.0.0.50","ProcessStartTime":1713091500000}'
 
 [[tests.outputs]]
 extract_from = "parse_and_normalize"

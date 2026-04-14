@@ -25,7 +25,7 @@ source = '''
   parsed = parse_regex(raw_msg, r'^(?P<remote_addr>\S+)\s+-\s+(?P<remote_user>\S+)\s+\[(?P<time_local>[^\]]+)\]\s+"(?P<method>\S+)\s+(?P<uri>\S+)\s+(?P<protocol>[^"]+)"\s+(?P<status>\d+)\s+(?P<body_bytes>\d+)\s+"(?P<referer>[^"]*?)"\s+"(?P<user_agent>[^"]*?)"') ?? {}
 
   remote_addr = parsed.remote_addr
-  valid = remote_addr != ""
+  valid = is_string(remote_addr) && remote_addr != ""
 
   if valid {
     method = parsed.method

@@ -61,7 +61,7 @@ source = '''
     .class_uid    = 4001
     .category_uid = 4
     .severity_id  = ocsf_severity
-    .time         = to_unix_timestamp!(.timestamp, unit: "milliseconds")
+    .time         = to_unix_timestamp(.timestamp, unit: "milliseconds") ?? to_unix_timestamp(now(), unit: "milliseconds")
     .action       = ocsf_action
     .action_id    = ocsf_action_id
 

@@ -6,7 +6,7 @@ insert_at = "parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = '{"metadata":{"eventType":"DetectionSummaryEvent","eventCreationTime":1713091425000,"customerIDString":"abc123","eventId":"evt-001","severity":4},"SeverityName":"High","ComputerName":"WS01","UserName":"CORP\\\\jdoe","FileName":"mimikatz.exe","CommandLine":"mimikatz.exe privilege::debug sekurlsa::logonpasswords","SHA256String":"a1b2c3d4e5f6","DetectName":"Credential Theft","DetectDescription":"Mimikatz credential harvesting tool","DetectId":"det-001","Tactic":"Credential Access","Technique":"OS Credential Dumping","TechniqueId":"T1003","LocalIP":"10.0.0.50","ParentImageFileName":"cmd.exe","ParentCommandLine":"cmd.exe /c","FalconHostLink":"https://falcon.crowdstrike.com/detects/det-001"}'
+  message = '{"metadata":{"eventType":"DetectionSummaryEvent","eventCreationTime":1713091425000,"customerIDString":"abc123","eventId":"evt-001","severity":4},"SeverityName":"High","ComputerName":"WS01","UserName":"CORP\\jdoe","FileName":"mimikatz.exe","CommandLine":"mimikatz.exe privilege::debug sekurlsa::logonpasswords","SHA256String":"a1b2c3d4e5f6","DetectName":"Credential Theft","DetectDescription":"Mimikatz credential harvesting tool","DetectId":"det-001","Tactic":"Credential Access","Technique":"OS Credential Dumping","TechniqueId":"T1003","LocalIP":"10.0.0.50","ParentImageFileName":"cmd.exe","ParentCommandLine":"cmd.exe /c","FalconHostLink":"https://falcon.crowdstrike.com/detects/det-001"}'
 
 [[tests.outputs]]
 extract_from = "parse_and_normalize"

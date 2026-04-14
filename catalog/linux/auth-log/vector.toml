@@ -33,7 +33,7 @@ source = '''
   is_ssh_accept = match(msg, r'Accepted\s+(password|publickey)\s+for')
   is_ssh_fail = match(msg, r'Failed\s+(password|publickey)\s+for')
   is_ssh_invalid = match(msg, r'Invalid user')
-  is_sudo = match(msg, r'sudo:')
+  is_sudo = app == "sudo" || match(msg, r'sudo:')
   is_pam = match(msg, r'pam_unix\(')
 
   # SSH accepted: "Accepted publickey for user from 1.2.3.4 port 54321 ssh2"
@@ -46,12 +46,13 @@ source = '''
   # sudo: "user : TTY=pts/0 ; PWD=/home/user ; USER=root ; COMMAND=/usr/bin/apt update"
   sudo_match = parse_regex(msg, r'(?P<user>\S+)\s+:\s+TTY=(?P<tty>\S+)\s+;\s+PWD=(?P<pwd>\S+)\s+;\s+USER=(?P<target_user>\S+)\s+;\s+COMMAND=(?P<command>.+)$') ?? {}
 
-  # Construire les champs en fonction du type
-  user_name = ssh_accept.user
-  src_ip = ssh_accept.ip
-  src_port_raw = ssh_accept.port
+  # Construire les champs en fonction du type (ssh_fail/sudo_match si ssh_accept vide)
+  # Note: ?? ne fait pas de null-coalescing en VRL — utiliser if != null
+  user_name = if ssh_accept.user != null { ssh_accept.user } else if ssh_fail.user != null { ssh_fail.user } else if sudo_match.user != null { sudo_match.user } else { null }
+  src_ip = if ssh_accept.ip != null { ssh_accept.ip } else if ssh_fail.ip != null { ssh_fail.ip } else { null }
+  src_port_raw = if ssh_accept.port != null { ssh_accept.port } else if ssh_fail.port != null { ssh_fail.port } else { null }
   src_port = if src_port_raw != null { to_int!(src_port_raw) } else { null }
-  auth_method = ssh_accept.method
+  auth_method = if ssh_accept.method != null { ssh_accept.method } else if ssh_fail.method != null { ssh_fail.method } else { null }
 
   # Severity et status
   is_success = is_ssh_accept || (is_sudo && !match(msg, r'authentication failure'))
