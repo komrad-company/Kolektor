@@ -1,4 +1,4 @@
-FROM timberio/vector:0.44-debian
+FROM timberio/vector:0.54.0-debian
 
 LABEL maintainer="Benoit Caillabet"
 LABEL description="Vector.dev with OCSF catalog — korelator-catalog"

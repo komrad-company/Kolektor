@@ -5,7 +5,7 @@ stages:
   - build
 
 variables:
-  VECTOR_IMAGE: timberio/vector:0.44-debian
+  VECTOR_IMAGE: timberio/vector:0.54.0-debian
   REGISTRY: $CI_REGISTRY
   IMAGE_NAME: $CI_REGISTRY_IMAGE
 
