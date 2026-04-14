@@ -69,8 +69,8 @@ source = '''
         "uid": to_string!(.requestID)
       },
       "response": {
-        "error":         error_code ?? "",
-        "error_message": error_msg ?? ""
+        "error":         error_code,
+        "error_message": error_msg
       }
     }
 
