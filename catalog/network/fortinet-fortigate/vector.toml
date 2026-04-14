@@ -1,0 +1,155 @@
+# ==============================================================================
+# Fortinet FortiGate — traffic/utm logs (key=value format)
+# OCSF Class : 4001 (Network Activity)
+# Input      : Syslog TCP/UDP
+# Tested with: FortiOS 7.2.x / 7.4.x
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.input]
+type    = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-514}"
+mode    = "tcp"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.parse_and_normalize]
+type   = "remap"
+inputs = ["input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+
+  raw_msg = to_string(.message) ?? ""
+
+  # FortiGate log format : key=value key="quoted value" ...
+  # date=2024-04-14 time=10:23:45 devname="FG100F" devid="FG100FXXXXXXXXXX"
+  # logid="0000000013" type="traffic" subtype="forward" level="notice"
+  # srcip=10.0.0.5 srcport=54321 dstip=8.8.8.8 dstport=443 ...
+  kv = parse_key_value(raw_msg, key_value_delimiter: "=", field_delimiter: " ") ?? {}
+
+  fgt_type = to_string(kv.type) ?? ""
+  fgt_subtype = to_string(kv.subtype) ?? ""
+  fgt_action = to_string(kv.action) ?? ""
+  fgt_level = to_string(kv.level) ?? "notice"
+
+  # Valider qu'on a bien un log FortiGate
+  valid = fgt_type != ""
+
+  if valid {
+    # Timestamp : date=YYYY-MM-DD time=HH:MM:SS
+    date_str = to_string(kv.date) ?? ""
+    time_str = to_string(kv.time) ?? ""
+    ts_str = date_str + "T" + time_str + "Z"
+    parsed_ts = parse_timestamp(ts_str, format: "%Y-%m-%dT%H:%M:%SZ") ?? null
+    ts = if parsed_ts != null { to_unix_timestamp(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+
+    # Action OCSF
+    ocsf_action = if fgt_action == "accept" || fgt_action == "allow" || fgt_action == "passthrough" {
+      "Allow"
+    } else if fgt_action == "deny" || fgt_action == "drop" || fgt_action == "blocked" {
+      "Deny"
+    } else if fgt_action == "close" || fgt_action == "timeout" {
+      "Close"
+    } else {
+      "Other"
+    }
+    ocsf_action_id = if ocsf_action == "Allow" { 1 } else if ocsf_action == "Deny" { 2 } else if ocsf_action == "Close" { 3 } else { 0 }
+
+    # Severity mapping : emergency/alert/critical → 5, error → 4, warning → 3, notice → 2, info → 1
+    ocsf_severity = if fgt_level == "emergency" || fgt_level == "alert" || fgt_level == "critical" {
+      5
+    } else if fgt_level == "error" {
+      4
+    } else if fgt_level == "warning" {
+      3
+    } else if fgt_level == "notice" {
+      2
+    } else {
+      1
+    }
+
+    .class_uid    = 4001
+    .category_uid = 4
+    .severity_id  = ocsf_severity
+    .time         = ts
+    .action       = ocsf_action
+    .action_id    = ocsf_action_id
+
+    .src_endpoint = {
+      "ip":   to_string(kv.srcip) ?? null,
+      "port": to_int(kv.srcport) ?? null
+    }
+    .dst_endpoint = {
+      "ip":   to_string(kv.dstip) ?? null,
+      "port": to_int(kv.dstport) ?? null
+    }
+    .connection_info = {
+      "protocol_num": to_int(kv.proto) ?? null,
+      "protocol_name": to_string(kv.service) ?? null,
+      "direction":     to_string(kv.direction) ?? null
+    }
+
+    .traffic = {
+      "bytes_in":    to_int(kv.rcvdbyte) ?? null,
+      "bytes_out":   to_int(kv.sentbyte) ?? null,
+      "packets_in":  to_int(kv.rcvdpkt) ?? null,
+      "packets_out": to_int(kv.sentpkt) ?? null
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "FortiGate",
+        "vendor_name": "Fortinet"
+      },
+      "version": "1.0.0",
+      "uid":     to_string(kv.logid) ?? null
+    }
+
+    .unmapped = {
+      "type":     fgt_type,
+      "subtype":  fgt_subtype,
+      "policyid": to_string(kv.policyid) ?? null,
+      "devname":  to_string(kv.devname) ?? null,
+      "srcintf":  to_string(kv.srcintf) ?? null,
+      "dstintf":  to_string(kv.dstintf) ?? null,
+      "duration": to_int(kv.duration) ?? null,
+      "appcat":   to_string(kv.appcat) ?? null,
+      "app":      to_string(kv.app) ?? null
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  .raw = del(.message)
+  del(.timestamp)
+  del(.hostname)
+  del(.appname)
+  del(.facility)
+  del(.severity)
+  del(.procid)
+  del(.msgid)
+  del(.version)
+  del(.source_type)
+'''
+
+# --- FILTER : drop malformed ---
+[transforms.filter_valid]
+type      = "filter"
+inputs    = ["parse_and_normalize"]
+condition = '.class_uid == 4001'
+
+# --- SINK : Quickwit ---
+[sinks.quickwit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"

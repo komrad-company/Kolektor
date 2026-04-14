@@ -1,0 +1,28 @@
+[[tests]]
+name = "auditd — SYSCALL execve success"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = 'type=SYSCALL msg=audit(1713091425.123:456): arch=c000003e syscall=59 success=yes exit=0 a0=55f2e6c44010 a1=55f2e6c44050 a2=55f2e6c44090 a3=7ffda7c6e3d0 items=2 ppid=1234 pid=5678 auid=1000 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts0 ses=3 comm="passwd" exe="/usr/bin/passwd" key="privileged"'
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 1003)
+  assert_eq!(.category_uid, 1)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.actor.process.pid, 5678)
+  assert_eq!(.actor.process.name, "passwd")
+  assert_eq!(.actor.user.uid, "0")
+  assert_eq!(.unmapped.audit_type, "SYSCALL")
+  assert_eq!(.unmapped.syscall, "59")
+  assert_eq!(.unmapped.key, "privileged")
+  assert!(exists(.raw))
+  assert!(exists(.time))
+'''

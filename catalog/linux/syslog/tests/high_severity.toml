@@ -1,0 +1,26 @@
+[[tests]]
+name = "Syslog — critical severity (emerg=0)"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = "Kernel panic - not syncing: Fatal exception"
+  timestamp = "2024-04-14T03:15:22Z"
+  hostname  = "db01"
+  appname   = "kernel"
+  facility  = "kern"
+  severity  = "0"
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6001)
+  assert_eq!(.severity_id, 5)
+  assert_eq!(.actor.process.name, "kernel")
+  assert_eq!(.raw, "Kernel panic - not syncing: Fatal exception")
+'''

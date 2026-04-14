@@ -1,0 +1,145 @@
+# ==============================================================================
+# Windows Sysmon — Events 1/3/7/11/22
+# OCSF Class : 1003 (Process Activity) / 4001 (Network Activity) / 1001 (File)
+# Input      : HTTP (JSON from Winlogbeat/NXLog)
+# Tested with: Sysmon 15.x, Windows 10/11/Server 2022
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.input]
+type     = "http_server"
+address  = "0.0.0.0:${LISTEN_PORT:-8515}"
+encoding = "json"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.parse_and_normalize]
+type   = "remap"
+inputs = ["input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+
+  # Sysmon via Winlogbeat : .winlog.event_id + .winlog.event_data.*
+  event_id = to_int(.winlog.event_id) ?? to_int(.event_id) ?? 0
+  event_data = object(.winlog.event_data) ?? object(.event_data) ?? {}
+  computer = to_string(.winlog.computer_name) ?? to_string(.computer_name) ?? "unknown"
+
+  ts_str = to_string(.["@timestamp"]) ?? to_string(.timestamp) ?? null
+  ts = if ts_str != null {
+    parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+    if parsed_ts != null { to_unix_timestamp(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+  } else {
+    to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  # Classification :
+  # 1  = Process Create → 1003
+  # 3  = Network Connection → 4001
+  # 7  = Image Loaded → 1003
+  # 11 = File Created → 1001
+  # 22 = DNS Query → 4003
+  is_process = event_id == 1 || event_id == 7
+  is_network = event_id == 3
+  is_file = event_id == 11
+  is_dns = event_id == 22
+
+  class_uid = if is_process { 1003 } else if is_network { 4001 } else if is_file { 1001 } else if is_dns { 4003 } else { 1003 }
+  category_uid = if is_network || is_dns { 4 } else { 1 }
+
+  ocsf_severity = 1
+
+  .class_uid    = class_uid
+  .category_uid = category_uid
+  .severity_id  = ocsf_severity
+  .time         = ts
+
+  # Process info (Event 1 — Process Create)
+  .actor = {
+    "user": {
+      "name": to_string(event_data.User) ?? null
+    },
+    "process": {
+      "pid":          to_int(event_data.ParentProcessId) ?? null,
+      "name":         to_string(event_data.ParentImage) ?? null,
+      "cmd_line":     to_string(event_data.ParentCommandLine) ?? null
+    }
+  }
+
+  .process = {
+    "pid":          to_int(event_data.ProcessId) ?? null,
+    "name":         to_string(event_data.Image) ?? null,
+    "cmd_line":     to_string(event_data.CommandLine) ?? null,
+    "file": {
+      "hashes": [
+        { "algorithm": "SHA256", "value": to_string(event_data.Hashes) ?? null }
+      ]
+    }
+  }
+
+  # Network (Event 3)
+  .src_endpoint = {
+    "ip":       to_string(event_data.SourceIp) ?? null,
+    "port":     to_int(event_data.SourcePort) ?? null,
+    "hostname": computer
+  }
+
+  .dst_endpoint = {
+    "ip":       to_string(event_data.DestinationIp) ?? null,
+    "port":     to_int(event_data.DestinationPort) ?? null,
+    "hostname": to_string(event_data.DestinationHostname) ?? null
+  }
+
+  # File (Event 11)
+  .file = {
+    "name": to_string(event_data.TargetFilename) ?? null
+  }
+
+  # DNS (Event 22)
+  .query = {
+    "hostname": to_string(event_data.QueryName) ?? null,
+    "type":     to_string(event_data.QueryResults) ?? null
+  }
+
+  .metadata = {
+    "product": {
+      "name":        "Sysmon",
+      "vendor_name": "Microsoft"
+    },
+    "version": "1.0.0",
+    "uid":     to_string(event_id)
+  }
+
+  .unmapped = {
+    "event_id":    event_id,
+    "rule_name":   to_string(event_data.RuleName) ?? null,
+    "guid":        to_string(event_data.ProcessGuid) ?? null
+  }
+
+  .raw = del(.message)
+  del(.winlog)
+  del(.event_data)
+  del(.["@timestamp"])
+  del(.timestamp)
+  del(.computer_name)
+  del(.event_id)
+  del(.source_type)
+'''
+
+# --- FILTER ---
+[transforms.filter_valid]
+type      = "filter"
+inputs    = ["parse_and_normalize"]
+condition = '.unmapped.event_id != 0'
+
+# --- SINK : Quickwit ---
+[sinks.quickwit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"

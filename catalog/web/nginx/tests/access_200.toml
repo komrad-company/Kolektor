@@ -1,0 +1,25 @@
+[[tests]]
+name = "nginx — 200 OK GET request"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '10.0.0.1 - - [14/Apr/2024:10:23:45 +0000] "GET /api/v1/users HTTP/1.1" 200 1234 "https://app.example.com/dashboard" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"'
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4001)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.http_request.http_method, "GET")
+  assert_eq!(.http_request.url.path, "/api/v1/users")
+  assert_eq!(.http_response.code, 200)
+  assert_eq!(.src_endpoint.ip, "10.0.0.1")
+  assert_eq!(.traffic.bytes_out, 1234)
+  assert_eq!(.metadata.product.name, "nginx")
+'''

@@ -1,0 +1,33 @@
+[[tests]]
+name = "Syslog RFC 3164 — nominal CRON event"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = "CMD (/usr/lib/apt/apt.systemd.daily install)"
+  timestamp = "2024-04-14T10:23:45Z"
+  hostname  = "web01"
+  appname   = "CRON"
+  facility  = "cron"
+  severity  = "6"
+  procid    = "12345"
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6001)
+  assert_eq!(.category_uid, 6)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.actor.process.name, "CRON")
+  assert_eq!(.actor.process.pid, 12345)
+  assert_eq!(.src_endpoint.hostname, "web01")
+  assert_eq!(.metadata.product.name, "Linux Syslog")
+  assert!(exists(.raw))
+  assert!(exists(.time))
+  assert!(exists(.tenant_id))
+'''

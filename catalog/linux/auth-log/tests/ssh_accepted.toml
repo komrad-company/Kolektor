@@ -1,0 +1,28 @@
+[[tests]]
+name = "auth-log — SSH accepted publickey"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = "Apr 14 10:23:45 web01 sshd[12345]: Accepted publickey for deploy from 10.0.0.5 port 54321 ssh2: RSA SHA256:abc123"
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3002)
+  assert_eq!(.category_uid, 3)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.status, "Success")
+  assert_eq!(.status_id, 1)
+  assert_eq!(.activity_name, "Logon")
+  assert_eq!(.actor.user.name, "deploy")
+  assert_eq!(.src_endpoint.ip, "10.0.0.5")
+  assert_eq!(.src_endpoint.port, 54321)
+  assert_eq!(.auth_protocol, "publickey")
+  assert!(exists(.raw))
+'''

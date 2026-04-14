@@ -1,0 +1,163 @@
+# ==============================================================================
+# AWS CloudTrail — JSON logs (via S3/SQS or file)
+# OCSF Class : 6001 (API Activity)
+# Input      : HTTP (JSON) or File
+# Tested with: CloudTrail JSON format, AWS
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.input]
+type     = "http_server"
+address  = "0.0.0.0:${LISTEN_PORT:-8516}"
+encoding = "json"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.parse_and_normalize]
+type   = "remap"
+inputs = ["input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+
+  # CloudTrail JSON structure :
+  # eventVersion, eventTime, eventSource, eventName, awsRegion,
+  # sourceIPAddress, userAgent, userIdentity.{type, arn, accountId, userName},
+  # requestParameters, responseElements, errorCode, errorMessage
+
+  event_name = to_string(.eventName) ?? ""
+  event_source = to_string(.eventSource) ?? ""
+  valid = event_name != ""
+
+  if valid {
+    # Timestamp : ISO 8601
+    ts_str = to_string(.eventTime) ?? ""
+    parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+    ts = if parsed_ts != null { to_unix_timestamp(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+
+    # Error = failure
+    error_code = to_string(.errorCode) ?? null
+    error_msg = to_string(.errorMessage) ?? null
+    is_error = error_code != null
+
+    ocsf_severity = if is_error { 3 } else { 1 }
+    status = if is_error { "Failure" } else { "Success" }
+    status_id = if is_error { 2 } else { 1 }
+
+    # User identity
+    user_identity = object(.userIdentity) ?? {}
+    user_type = to_string(user_identity.type) ?? ""
+    user_arn = to_string(user_identity.arn) ?? null
+    user_name = to_string(user_identity.userName) ?? to_string(user_identity.principalId) ?? null
+    account_id = to_string(user_identity.accountId) ?? null
+
+    # Service name from eventSource (e.g. "ec2.amazonaws.com" → "ec2")
+    service_name = replace(event_source, r'\.amazonaws\.com$', "")
+
+    .class_uid    = 6001
+    .category_uid = 6
+    .severity_id  = ocsf_severity
+    .time         = ts
+    .status       = status
+    .status_id    = status_id
+
+    .api = {
+      "operation": event_name,
+      "service": {
+        "name": service_name
+      },
+      "request": {
+        "uid": to_string(.requestID) ?? null
+      },
+      "response": {
+        "error":         error_code,
+        "error_message": error_msg
+      }
+    }
+
+    .actor = {
+      "user": {
+        "name":       user_name,
+        "uid":        user_arn,
+        "account_uid": account_id,
+        "type":       user_type
+      }
+    }
+
+    .src_endpoint = {
+      "ip": to_string(.sourceIPAddress) ?? null
+    }
+
+    .http_request = {
+      "user_agent": to_string(.userAgent) ?? null
+    }
+
+    .cloud = {
+      "provider": "AWS",
+      "region":   to_string(.awsRegion) ?? null,
+      "account_uid": account_id
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "CloudTrail",
+        "vendor_name": "AWS"
+      },
+      "version": to_string(.eventVersion) ?? "1.0.0",
+      "uid":     to_string(.eventID) ?? null
+    }
+
+    .unmapped = {
+      "event_type":          to_string(.eventType) ?? null,
+      "event_category":      to_string(.eventCategory) ?? null,
+      "management_event":    .managementEvent ?? null,
+      "read_only":           .readOnly ?? null,
+      "recipient_account_id": to_string(.recipientAccountId) ?? null
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  .raw = encode_json(.)
+  del(.eventVersion)
+  del(.eventTime)
+  del(.eventSource)
+  del(.eventName)
+  del(.awsRegion)
+  del(.sourceIPAddress)
+  del(.userAgent)
+  del(.userIdentity)
+  del(.requestParameters)
+  del(.responseElements)
+  del(.errorCode)
+  del(.errorMessage)
+  del(.requestID)
+  del(.eventID)
+  del(.eventType)
+  del(.eventCategory)
+  del(.managementEvent)
+  del(.readOnly)
+  del(.recipientAccountId)
+  del(.source_type)
+'''
+
+# --- FILTER ---
+[transforms.filter_valid]
+type      = "filter"
+inputs    = ["parse_and_normalize"]
+condition = '.class_uid == 6001'
+
+# --- SINK : Quickwit ---
+[sinks.quickwit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-audit/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"

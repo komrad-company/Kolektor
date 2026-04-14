@@ -1,0 +1,79 @@
+[[tests]]
+name = "CloudTrail — AccessDenied error"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  eventVersion    = "1.08"
+  eventTime       = "2024-04-14T10:30:00Z"
+  eventSource     = "s3.amazonaws.com"
+  eventName       = "GetObject"
+  awsRegion       = "eu-west-1"
+  sourceIPAddress = "10.0.0.5"
+  userAgent       = "aws-cli/2.15.0 Python/3.11.6"
+  errorCode       = "AccessDenied"
+  errorMessage    = "Access Denied"
+  requestID       = "req-002"
+  eventID         = "evt-002"
+
+  [tests.inputs.log_fields.userIdentity]
+  type      = "AssumedRole"
+  arn       = "arn:aws:sts::123456789012:assumed-role/dev-role/session1"
+  accountId = "123456789012"
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6001)
+  assert_eq!(.severity_id, 3)
+  assert_eq!(.status, "Failure")
+  assert_eq!(.status_id, 2)
+  assert_eq!(.api.operation, "GetObject")
+  assert_eq!(.api.service.name, "s3")
+  assert_eq!(.api.response.error, "AccessDenied")
+  assert_eq!(.actor.user.type, "AssumedRole")
+  assert_eq!(.cloud.region, "eu-west-1")
+'''
+
+[[tests]]
+name = "CloudTrail — RunInstances (EC2 launch)"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  eventVersion    = "1.08"
+  eventTime       = "2024-04-14T11:00:00Z"
+  eventSource     = "ec2.amazonaws.com"
+  eventName       = "RunInstances"
+  awsRegion       = "us-west-2"
+  sourceIPAddress = "10.0.0.5"
+  userAgent       = "console.ec2.amazonaws.com"
+  requestID       = "req-003"
+  eventID         = "evt-003"
+  readOnly        = false
+  managementEvent = true
+
+  [tests.inputs.log_fields.userIdentity]
+  type      = "IAMUser"
+  arn       = "arn:aws:iam::123456789012:user/devops"
+  accountId = "123456789012"
+  userName  = "devops"
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.api.operation, "RunInstances")
+  assert_eq!(.api.service.name, "ec2")
+  assert_eq!(.actor.user.name, "devops")
+  assert_eq!(.status, "Success")
+'''

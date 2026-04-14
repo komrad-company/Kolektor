@@ -1,0 +1,130 @@
+# ==============================================================================
+# OPNsense Firewall — filterlog
+# OCSF Class : 4001 (Network Activity)
+# Input      : Syslog TCP/UDP
+# Tested with: OPNsense 24.x/25.x
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.input]
+type    = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-514}"
+mode    = "tcp"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.parse_and_normalize]
+type   = "remap"
+inputs = ["input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+
+  raw_msg = to_string(.message) ?? ""
+
+  # filterlog CSV format (OPNsense) :
+  # rulenr,subrulenr,anchorname,label,interface,reason,action,direction,ip_version,...
+  # IPv4 (ip_version=4) :
+  #   ...,tos,ecn,ttl,id,offset,flags,proto_id,proto,length,src,dst,[sport,dport for TCP/UDP]
+  # Champs positions :
+  # 0=rulenr, 1=subrulenr, 2=anchorname, 3=label, 4=interface, 5=reason, 6=action, 7=direction
+  # 8=ip_version
+  # IPv4: 9=tos, 10=ecn, 11=ttl, 12=id, 13=offset, 14=flags, 15=proto_id, 16=proto, 17=length
+  #        18=src_ip, 19=dst_ip
+  # TCP/UDP: 20=src_port, 21=dst_port
+
+  fields = split(raw_msg, ",")
+  field_count = length(fields)
+
+  # Besoin d'au moins 20 champs pour un log filterlog valide
+  valid = field_count >= 20
+
+  if valid {
+    action_raw = to_string(fields[6]) ?? ""
+    direction = to_string(fields[7]) ?? ""
+    ip_version = to_string(fields[8]) ?? "4"
+    proto = to_string(fields[16]) ?? ""
+    src_ip = to_string(fields[18]) ?? ""
+    dst_ip = to_string(fields[19]) ?? ""
+
+    src_port_raw = if field_count > 20 { to_string(fields[20]) ?? "" } else { "" }
+    dst_port_raw = if field_count > 21 { to_string(fields[21]) ?? "" } else { "" }
+    src_port = to_int(src_port_raw) ?? null
+    dst_port = to_int(dst_port_raw) ?? null
+    proto_num = to_int(fields[15]) ?? null
+    interface = to_string(fields[4]) ?? ""
+
+    ocsf_action = if action_raw == "pass" { "Allow" } else { "Deny" }
+    ocsf_action_id = if action_raw == "pass" { 1 } else { 2 }
+    ocsf_severity = if action_raw == "pass" { 1 } else { 2 }
+
+    .class_uid    = 4001
+    .category_uid = 4
+    .severity_id  = ocsf_severity
+    .time         = to_unix_timestamp(.timestamp ?? now(), unit: "milliseconds")
+    .action       = ocsf_action
+    .action_id    = ocsf_action_id
+
+    .src_endpoint = {
+      "ip":   src_ip,
+      "port": src_port
+    }
+    .dst_endpoint = {
+      "ip":   dst_ip,
+      "port": dst_port
+    }
+    .connection_info = {
+      "protocol_num": proto_num,
+      "protocol_name": proto,
+      "direction":     direction
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "OPNsense",
+        "vendor_name": "OPNsense Project"
+      },
+      "version": "1.0.0"
+    }
+
+    .unmapped = {
+      "interface":  interface,
+      "rule_nr":    to_string(fields[0]) ?? "",
+      "ip_version": ip_version
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  .raw = del(.message)
+  del(.timestamp)
+  del(.hostname)
+  del(.appname)
+  del(.facility)
+  del(.severity)
+  del(.procid)
+  del(.msgid)
+  del(.version)
+  del(.source_type)
+'''
+
+# --- FILTER : drop malformed ---
+[transforms.filter_valid]
+type      = "filter"
+inputs    = ["parse_and_normalize"]
+condition = '.class_uid == 4001'
+
+# --- SINK : Quickwit ---
+[sinks.quickwit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"

@@ -1,0 +1,26 @@
+[[tests]]
+name = "Syslog — missing optional fields (no procid, no facility)"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = "system boot completed"
+  timestamp = "2024-04-14T08:00:00Z"
+  hostname  = "srv01"
+  appname   = "kernel"
+  severity  = "5"
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6001)
+  assert_eq!(.actor.process.name, "kernel")
+  assert_eq!(.src_endpoint.hostname, "srv01")
+  assert_eq!(.severity_id, 2)
+  assert!(exists(.raw))
+'''

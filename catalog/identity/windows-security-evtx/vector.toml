@@ -1,0 +1,141 @@
+# ==============================================================================
+# Windows Security Event Log (EVTX) — via Winlogbeat JSON
+# OCSF Class : 3002 (Authentication) / 3001 (Account Change) / 1003 (Process)
+# Input      : HTTP (JSON from Winlogbeat/NXLog)
+# Tested with: Windows Server 2019/2022, Winlogbeat 8.x
+# Events     : 4624/4625/4648/4688/4698/4720/4732
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.input]
+type    = "http_server"
+address = "0.0.0.0:${LISTEN_PORT:-8514}"
+encoding = "json"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.parse_and_normalize]
+type   = "remap"
+inputs = ["input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+
+  # Winlogbeat JSON structure :
+  # .winlog.event_id, .winlog.event_data.*, .winlog.computer_name, .@timestamp
+  event_id = to_int(.winlog.event_id) ?? to_int(.event_id) ?? 0
+  event_data = object(.winlog.event_data) ?? object(.event_data) ?? {}
+  computer = to_string(.winlog.computer_name) ?? to_string(.computer_name) ?? "unknown"
+
+  # Timestamp
+  ts_str = to_string(.["@timestamp"]) ?? to_string(.timestamp) ?? null
+  ts = if ts_str != null {
+    parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+    if parsed_ts != null { to_unix_timestamp(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+  } else {
+    to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  # Classification par Event ID
+  # 4624/4625/4648 = Authentication (3002)
+  # 4720/4732 = Account Change (3001)
+  # 4688 = Process Activity (1003)
+  # 4698 = Scheduled Task (1003)
+  is_auth = event_id == 4624 || event_id == 4625 || event_id == 4648
+  is_account = event_id == 4720 || event_id == 4732
+  is_process = event_id == 4688 || event_id == 4698
+
+  class_uid = if is_auth { 3002 } else if is_account { 3001 } else if is_process { 1003 } else { 3002 }
+  category_uid = if is_process { 1 } else { 3 }
+
+  # Severity
+  # 4625 (failed logon), 4648 (explicit creds) = medium
+  # 4720 (user created), 4732 (member added to group) = low
+  # 4688 (new process), 4698 (scheduled task) = info
+  ocsf_severity = if event_id == 4625 { 3 } else if event_id == 4648 || event_id == 4720 || event_id == 4732 { 2 } else { 1 }
+
+  # Status for auth events
+  status = if event_id == 4624 || event_id == 4648 { "Success" } else if event_id == 4625 { "Failure" } else { "Other" }
+  status_id = if event_id == 4624 || event_id == 4648 { 1 } else if event_id == 4625 { 2 } else { 0 }
+
+  # User info
+  target_user = to_string(event_data.TargetUserName) ?? null
+  target_domain = to_string(event_data.TargetDomainName) ?? null
+  subject_user = to_string(event_data.SubjectUserName) ?? null
+  logon_type = to_int(event_data.LogonType) ?? null
+
+  .class_uid    = class_uid
+  .category_uid = category_uid
+  .severity_id  = ocsf_severity
+  .time         = ts
+  .status       = status
+  .status_id    = status_id
+
+  .actor = {
+    "user": {
+      "name":   subject_user,
+      "domain": to_string(event_data.SubjectDomainName) ?? null
+    }
+  }
+
+  .user = {
+    "name":   target_user,
+    "domain": target_domain,
+    "uid":    to_string(event_data.TargetUserSid) ?? to_string(event_data.TargetSid) ?? null
+  }
+
+  .src_endpoint = {
+    "ip":       to_string(event_data.IpAddress) ?? null,
+    "port":     to_int(event_data.IpPort) ?? null,
+    "hostname": computer
+  }
+
+  .auth_protocol_id = logon_type
+
+  .metadata = {
+    "product": {
+      "name":        "Windows Security",
+      "vendor_name": "Microsoft"
+    },
+    "version": "1.0.0",
+    "uid":     to_string(event_id)
+  }
+
+  .unmapped = {
+    "event_id":        event_id,
+    "logon_type":      logon_type,
+    "process_name":    to_string(event_data.NewProcessName) ?? to_string(event_data.ProcessName) ?? null,
+    "parent_process":  to_string(event_data.ParentProcessName) ?? null,
+    "command_line":    to_string(event_data.CommandLine) ?? null,
+    "logon_process":   to_string(event_data.LogonProcessName) ?? null,
+    "failure_reason":  to_string(event_data.FailureReason) ?? null,
+    "sub_status":      to_string(event_data.SubStatus) ?? null
+  }
+
+  .raw = del(.message)
+  del(.winlog)
+  del(.event_data)
+  del(.["@timestamp"])
+  del(.timestamp)
+  del(.computer_name)
+  del(.event_id)
+  del(.source_type)
+'''
+
+# --- FILTER : drop unknown events ---
+[transforms.filter_valid]
+type      = "filter"
+inputs    = ["parse_and_normalize"]
+condition = '.unmapped.event_id != 0'
+
+# --- SINK : Quickwit ---
+[sinks.quickwit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-identity/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"

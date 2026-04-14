@@ -1,0 +1,62 @@
+# ==============================================================================
+# <Source Name> — <Log Type>
+# OCSF Class : <class_uid> (<Class Name>)
+# Input      : <syslog/file/http>
+# Tested with: <Product Version>
+# ==============================================================================
+
+# --- SOURCE ---
+# Adapter le type de source selon le cas d'usage
+[sources.input]
+type    = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-514}"
+mode    = "tcp"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.parse_and_normalize]
+type   = "remap"
+inputs = ["input"]
+source = '''
+  # Champs injectes par l'orchestrateur au runtime
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+
+  # --- Parsing du log brut ---
+  # TODO: parser le message selon le format de la source
+
+  # --- Normalisation OCSF ---
+  .class_uid    = 0       # TODO: classe OCSF
+  .category_uid = 0       # TODO: categorie OCSF
+  .severity_id  = 1       # 0=Unknown, 1=Info, 2=Low, 3=Medium, 4=High, 5=Critical
+  .time         = to_unix_timestamp(now(), unit: "milliseconds")
+
+  .metadata = {
+    "product": {
+      "name":        "TODO",
+      "vendor_name": "TODO"
+    },
+    "version": "1.0.0"
+  }
+
+  # Conserver le message original
+  .raw = del(.message)
+'''
+
+# --- FILTER : drop malformed events ---
+[transforms.filter_valid]
+type      = "filter"
+inputs    = ["parse_and_normalize"]
+condition = 'exists(.class_uid) && .class_uid != 0'
+
+# --- SINK : Quickwit ---
+[sinks.quickwit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"

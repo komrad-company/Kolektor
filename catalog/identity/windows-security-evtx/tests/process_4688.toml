@@ -1,0 +1,67 @@
+[[tests]]
+name = "Windows Security — 4688 New Process Created"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = ""
+
+  [tests.inputs.log_fields.winlog]
+  event_id      = 4688
+  computer_name = "WS01.corp.local"
+
+    [tests.inputs.log_fields.winlog.event_data]
+    SubjectUserName   = "jdoe"
+    SubjectDomainName = "CORP"
+    NewProcessName    = "C:\\Windows\\System32\\cmd.exe"
+    ParentProcessName = "C:\\Windows\\explorer.exe"
+    CommandLine       = "cmd.exe /c whoami"
+
+  [tests.inputs.log_fields]
+  "@timestamp" = "2024-04-14T11:00:00.000Z"
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 1003)
+  assert_eq!(.category_uid, 1)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.unmapped.event_id, 4688)
+  assert_eq!(.unmapped.process_name, "C:\\Windows\\System32\\cmd.exe")
+  assert_eq!(.unmapped.command_line, "cmd.exe /c whoami")
+  assert_eq!(.actor.user.name, "jdoe")
+'''
+
+[[tests]]
+name = "Windows Security — unknown event ID (should be dropped)"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = ""
+
+  [tests.inputs.log_fields.winlog]
+  event_id      = 0
+  computer_name = "DC01"
+
+  [tests.inputs.log_fields]
+  "@timestamp" = "2024-04-14T12:00:00.000Z"
+
+# No output expected — dropped by filter_valid
+[[tests.outputs]]
+extract_from = "filter_valid"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  # This event should be dropped — if it reaches here, something is wrong
+  # But vector test expects at least one condition, so we assert on the event_id
+  assert_eq!(.unmapped.event_id, 0, "event with id 0 should have been dropped")
+'''

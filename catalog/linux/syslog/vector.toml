@@ -1,0 +1,90 @@
+# ==============================================================================
+# Linux Syslog — RFC 3164 / RFC 5424
+# OCSF Class : 6001 (API Activity) — generic system event
+# Input      : Syslog TCP/UDP
+# Tested with: rsyslog, syslog-ng, systemd-journald
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.input]
+type    = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-514}"
+mode    = "tcp"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.parse_and_normalize]
+type   = "remap"
+inputs = ["input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+
+  # La source syslog de Vector parse automatiquement :
+  # .timestamp, .hostname, .appname, .facility, .severity, .message
+  # On normalise en OCSF
+
+  sev = to_int(.severity) ?? 6
+  ocsf_severity = if sev <= 2 { 5 } else if sev <= 3 { 4 } else if sev <= 4 { 3 } else if sev <= 5 { 2 } else { 1 }
+
+  .class_uid    = 6001
+  .category_uid = 6
+  .severity_id  = ocsf_severity
+  .time         = to_unix_timestamp(.timestamp ?? now(), unit: "milliseconds")
+
+  .api = {
+    "operation": to_string(.appname) ?? "unknown",
+    "service": { "name": "syslog" }
+  }
+
+  .actor = {
+    "process": {
+      "name": to_string(.appname) ?? "unknown",
+      "pid":  to_int(.procid) ?? null
+    }
+  }
+
+  .src_endpoint = {
+    "hostname": to_string(.hostname) ?? "unknown"
+  }
+
+  .metadata = {
+    "product": {
+      "name":        "Linux Syslog",
+      "vendor_name": "Linux"
+    },
+    "version": "1.0.0",
+    "log_provider": to_string(.facility) ?? null
+  }
+
+  .raw = del(.message)
+
+  # Nettoyer les champs syslog natifs
+  del(.timestamp)
+  del(.hostname)
+  del(.appname)
+  del(.facility)
+  del(.severity)
+  del(.procid)
+  del(.msgid)
+  del(.version)
+  del(.source_type)
+'''
+
+# --- FILTER : drop vides ---
+[transforms.filter_valid]
+type      = "filter"
+inputs    = ["parse_and_normalize"]
+condition = '.raw != null && .raw != ""'
+
+# --- SINK : Quickwit ---
+[sinks.quickwit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-audit/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"

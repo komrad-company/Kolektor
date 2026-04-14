@@ -1,0 +1,19 @@
+[[tests]]
+name = "nginx — malformed line (not combined format)"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = "2024/04/14 10:23:45 [error] 1234#0: *567 open() failed (2: No such file or directory)"
+
+# class_uid 0 → dropped by filter_valid
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+'''

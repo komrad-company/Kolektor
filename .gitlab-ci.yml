@@ -1,0 +1,56 @@
+stages:
+  - validate
+  - test
+  - report
+
+variables:
+  VECTOR_IMAGE: timberio/vector:0.44-debian
+
+validate:
+  stage: validate
+  image: $VECTOR_IMAGE
+  script:
+    - chmod +x ci/validate.sh
+    - ci/validate.sh
+  artifacts:
+    reports:
+      junit: ci/results/validate-junit.xml
+    paths:
+      - ci/results/
+    when: always
+
+test:
+  stage: test
+  image: $VECTOR_IMAGE
+  script:
+    - chmod +x ci/test.sh
+    - ci/test.sh
+  artifacts:
+    reports:
+      junit: ci/results/test-junit.xml
+    paths:
+      - ci/results/
+    when: always
+
+report:
+  stage: report
+  image: python:3.12-slim
+  needs:
+    - job: validate
+      artifacts: true
+    - job: test
+      artifacts: true
+  script:
+    - python ci/report.py
+  artifacts:
+    paths:
+      - ci/results/report.md
+  when: always
+
+coverage:
+  stage: report
+  image: $VECTOR_IMAGE
+  script:
+    - chmod +x ci/coverage.sh
+    - ci/coverage.sh
+  allow_failure: false

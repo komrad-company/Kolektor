@@ -1,0 +1,27 @@
+[[tests]]
+name = "OPNsense filterlog — block TCP inbound"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = "1,,,abc,igc0,match,block,in,4,0x0,,64,1234,0,DF,6,tcp,52,185.220.101.42,192.168.2.1,54321,22,0"
+  timestamp = "2024-04-14T10:23:45Z"
+  hostname  = "fw1"
+  appname   = "filterlog"
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4001)
+  assert_eq!(.action, "Deny")
+  assert_eq!(.action_id, 2)
+  assert_eq!(.severity_id, 2)
+  assert_eq!(.src_endpoint.ip, "185.220.101.42")
+  assert_eq!(.dst_endpoint.ip, "192.168.2.1")
+  assert_eq!(.dst_endpoint.port, 22)
+'''
