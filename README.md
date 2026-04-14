@@ -1,61 +1,157 @@
-# Korelator Catalog — Vector.dev Config Catalog
+# Korelator Catalog — Vector.dev OCSF Config Catalog
 
-Catalogue de configurations Vector.dev pour la normalisation de logs en OCSF.
+Catalogue de configurations [Vector.dev](https://vector.dev) pour la normalisation de logs en [OCSF](https://schema.ocsf.io).
+Matiere premiere du SOC UI : chaque config est une source de donnees deployable par tenant.
 
 ## Architecture
 
 ```
-Sources (syslog, fichiers, API) → Vector (parse + VRL) → Quickwit (index OCSF)
+┌──────────┐     ┌──────────────────────────┐     ┌──────────┐     ┌───────────┐
+│  Sources  │────→│  Vector (catalog config)  │────→│ Quickwit  │────→│ Korelator │
+│ syslog,   │     │  parse VRL + OCSF norm    │     │ index par │     │ correlation│
+│ JSON, file│     │  1 pod par datasource     │     │ classe    │     │ + alertes  │
+└──────────┘     └──────────────────────────┘     └──────────┘     └───────────┘
 ```
 
-## Structure
+**Deploiement K8s** : 1 image Docker contient Vector + tout le catalog.
+Au runtime, `SOURCE_TYPE` selectionne la config. Chaque datasource = 1 Deployment.
 
 ```
-catalog/
-├── network/       # Firewalls, NDR (OCSF 4001 Network Activity)
-├── endpoint/      # EDR, Sysmon (OCSF 1001/1003 File/Process Activity)
-├── identity/      # AD, IdP (OCSF 3001/3002 Account/Authentication)
-├── linux/         # syslog, auditd, auth-log
-├── cloud/         # CloudTrail, GCP Audit (OCSF 6001 API Activity)
-├── web/           # nginx, apache, haproxy
-└── kubernetes/    # k8s audit, container logs
+SOC UI → API Rust → commit Git → ArgoCD → Deployment Vector (SOURCE_TYPE=xxx) → Quickwit
 ```
 
-## Utilisation
+## Structure du repo
 
-Chaque source dans `catalog/<category>/<source>/` contient :
-- `vector.toml` — config Vector complete (source + transform OCSF + sink Quickwit)
-- `tests/*.toml` — cas de test `vector test` avec logs bruts reels
-- `README.md` — documentation de la source
+```
+korelator-catalog/
+│
+├── Dockerfile              # Image Vector + catalog embarque
+├── entrypoint.sh           # Selectionne la config via $SOURCE_TYPE
+├── .gitlab-ci.yml          # Pipeline : validate → test → coverage → build
+│
+├── _schema/
+│   ├── template.toml       # Template vide commente (copier pour nouvelle source)
+│   └── README.md           # Guide de contribution pas-a-pas
+│
+├── _lib/
+│   └── sinks.toml          # Sinks Quickwit reutilisables par index OCSF
+│
+├── catalog/                # Toutes les configs Vector par categorie
+│   ├── network/            # Firewalls, NDR → OCSF 4001 Network Activity
+│   │   ├── opnsense/       #   filterlog CSV via syslog
+│   │   └── fortinet-fortigate/ # key=value via syslog
+│   │
+│   ├── endpoint/           # EDR → OCSF 1003 Process / 2001 Finding
+│   │   └── crowdstrike-falcon/ # JSON via SIEM Connector syslog
+│   │
+│   ├── identity/           # IdP/AD → OCSF 3002 Auth / 3001 Account
+│   │   ├── windows-security-evtx/ # Winlogbeat JSON (4624/4625/4688...)
+│   │   └── windows-sysmon/        # Winlogbeat JSON (events 1/3/7/11/22)
+│   │
+│   ├── linux/              # Logs Linux natifs
+│   │   ├── syslog/         #   RFC 3164/5424 via syslog TCP → OCSF 6001
+│   │   ├── auditd/         #   audit.log key=value → OCSF 1003/3002
+│   │   └── auth-log/       #   auth.log SSH/sudo/PAM → OCSF 3002
+│   │
+│   ├── cloud/              # Cloud providers → OCSF 6001 API Activity
+│   │   └── aws-cloudtrail/ # JSON via HTTP
+│   │
+│   └── web/                # Serveurs web → OCSF 4001 Network Activity
+│       └── nginx/          #   combined access log via file
+│
+└── ci/                     # Scripts CI
+    ├── validate.sh         # vector validate sur chaque config
+    ├── test.sh             # vector test (merge config + tests/*.toml)
+    ├── coverage.sh         # Verifie min 3 tests par source
+    └── report.py           # Genere rapport markdown CI
+```
+
+## Chaque source contient
+
+```
+catalog/<category>/<source>/
+├── vector.toml             # Config complete : source + transform VRL + sink
+├── tests/
+│   ├── nominal.toml        # Event standard, tous champs presents
+│   ├── edge_case.toml      # Champs optionnels manquants ou valeurs limites
+│   └── malformed.toml      # Input invalide → droppe proprement
+└── README.md               # Doc : format, config source, mapping OCSF, liens
+```
 
 ## Variables d'environnement runtime
 
-| Variable           | Description                          | Exemple                     |
-|--------------------|--------------------------------------|-----------------------------|
-| `TENANT_ID`        | ID du tenant (multi-tenant)          | `tenant-acme`               |
-| `DATASOURCE_ID`    | ID de la datasource instanciee       | `ds-opnsense-01`            |
-| `LISTEN_PORT`      | Port d'ecoute (override du defaut)   | `514`                       |
-| `QUICKWIT_ENDPOINT`| URL Quickwit                         | `http://quickwit:7280`      |
+| Variable            | Obligatoire | Description                          | Exemple                           |
+|---------------------|-------------|--------------------------------------|-----------------------------------|
+| `SOURCE_TYPE`       | oui         | Chemin catalog (categorie/source)    | `network/opnsense`                |
+| `TENANT_ID`         | oui         | ID du tenant (multi-tenant)          | `tenant-acme`                     |
+| `DATASOURCE_ID`     | oui         | ID unique de la datasource           | `ds-opnsense-hq`                  |
+| `QUICKWIT_ENDPOINT` | oui         | URL Quickwit                         | `http://quickwit-searcher:7280`   |
+| `LISTEN_PORT`       | non         | Override du port d'ecoute            | `5140`                            |
 
-## CI
+## Image Docker
 
 ```bash
-# Valider toutes les configs
-ci/validate.sh
+# Build local
+docker build -t korelator-catalog .
 
-# Lancer tous les tests
-ci/test.sh
+# Run avec une source specifique
+docker run -e SOURCE_TYPE=linux/syslog \
+           -e TENANT_ID=acme \
+           -e DATASOURCE_ID=ds-syslog-01 \
+           -e QUICKWIT_ENDPOINT=http://quickwit:7280 \
+           -p 5140:514 \
+           korelator-catalog
+
+# Lister les sources disponibles
+docker run korelator-catalog
 ```
+
+L'image est buildee par Kaniko en CI et pushee sur `ghcr.io/komrad-company/kolektor`.
+
+## Deploiement K8s (ArgoCD)
+
+Chaque datasource = 1 Deployment dans `infrastructure/korelator-collector/` (repo argocd) :
+
+```yaml
+env:
+  - name: SOURCE_TYPE
+    value: "linux/syslog"        # ← selectionne la config du catalog
+  - name: TENANT_ID
+    value: "acme"
+  - name: DATASOURCE_ID
+    value: "ds-syslog-01"
+  - name: QUICKWIT_ENDPOINT
+    value: "http://quickwit-searcher.quickwit:7280"
+```
+
+ArgoCD sync automatique → pod Vector pret a recevoir.
 
 ## Index Quickwit cibles
 
-| Index            | Classe OCSF                | Sources typiques          |
-|------------------|----------------------------|---------------------------|
-| `ocsf-network`   | 4001 Network Activity      | Firewalls, proxies, NDR   |
-| `ocsf-endpoint`  | 1001/1003 File/Process     | EDR, Sysmon, auditd       |
-| `ocsf-identity`  | 3001/3002 Account/Auth     | AD, FreeIPA, Okta         |
-| `ocsf-audit`     | 6001 API Activity          | CloudTrail, GCP, K8s      |
+| Index            | Classe OCSF                | category_uid | Sources typiques               |
+|------------------|----------------------------|--------------|--------------------------------|
+| `ocsf-network`   | 4001 Network Activity      | 4            | opnsense, fortigate, nginx     |
+| `ocsf-endpoint`  | 1001/1003 File/Process     | 1            | crowdstrike, sysmon, auditd    |
+| `ocsf-identity`  | 3001/3002 Account/Auth     | 3            | windows-evtx, auth-log         |
+| `ocsf-audit`     | 6001 API Activity          | 6            | cloudtrail, syslog             |
+
+## CI Pipeline
+
+| Stage    | Description                                   | Image                     |
+|----------|-----------------------------------------------|---------------------------|
+| validate | `vector validate` sur chaque vector.toml      | vector:0.54.0-debian      |
+| test     | `vector test` (config + tests merges)         | vector:0.54.0-debian      |
+| coverage | Verifie >= 3 tests par source                 | vector:0.54.0-debian      |
+| report   | Genere rapport markdown en artifact           | python:3.12-slim          |
+| build    | Kaniko → registry GitLab (main uniquement)    | kaniko:v1.23.2-debug      |
 
 ## Contribuer
 
-Voir `_schema/README.md` pour le guide de contribution.
+1. Copier `_schema/template.toml` → `catalog/<category>/<source>/vector.toml`
+2. Ecrire le VRL de parsing + normalisation OCSF
+3. Ajouter >= 3 tests dans `tests/` avec des logs bruts reels
+4. Ajouter un `README.md` documentant la source
+5. `ci/validate.sh` + `ci/test.sh` pour valider localement
+6. Push → CI valide automatiquement
+
+Voir `_schema/README.md` pour le guide complet.
