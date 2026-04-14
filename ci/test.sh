@@ -2,6 +2,15 @@
 # Lance vector test sur chaque source du catalog
 set -euo pipefail
 
+# Dummy env vars pour que Vector ne plante pas sur les ${VAR} dans les configs
+export TENANT_ID="ci-test"
+export DATASOURCE_ID="ci-test"
+export QUICKWIT_ENDPOINT="http://localhost:7280"
+export LISTEN_PORT="5140"
+export AUTH_LOG_PATH="/dev/null"
+export AUDIT_LOG_PATH="/dev/null"
+export NGINX_ACCESS_LOG="/dev/null"
+
 RESULTS_DIR="ci/results"
 mkdir -p "$RESULTS_DIR"
 
@@ -32,7 +41,7 @@ for source_dir in catalog/*/*/; do
     cat "$tf" >> "$MERGED"
   done
 
-  if OUTPUT=$(vector test --no-environment "$MERGED" 2>&1); then
+  if OUTPUT=$(vector test "$MERGED" 2>&1); then
     echo "  OK"
     PASSED=$((PASSED + 1))
     JUNIT_CASES="${JUNIT_CASES}    <testcase classname=\"test\" name=\"${SOURCE_NAME}\" />\n"
