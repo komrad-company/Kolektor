@@ -1,0 +1,117 @@
+# ==============================================================================
+# Linux auditd — SYSCALL, EXECVE, PROCTITLE, USER_AUTH, USER_LOGIN
+# OCSF Class : 1003 (Process Activity) + 3002 (Authentication)
+# Input      : File (/var/log/audit/audit.log)
+# Tested with: auditd 3.0+, Linux 5.x/6.x
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.input]
+type    = "file"
+include = ["${AUDIT_LOG_PATH:-/var/log/audit/audit.log}"]
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.parse_and_normalize]
+type   = "remap"
+inputs = ["input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+
+  # Parse auditd key=value format
+  # type=SYSCALL msg=audit(1713091425.123:456): arch=c000003e syscall=59 ...
+  raw_msg = string!(.message)
+
+  # Extraire le type d'event
+  audit_type = ""
+  type_match = parse_regex(raw_msg, r'^type=(?P<type>[A-Z_]+)') ?? {}
+  audit_type = to_string(type_match.type) ?? ""
+
+  # Extraire le timestamp depuis msg=audit(EPOCH.MS:SERIAL)
+  ts_match = parse_regex(raw_msg, r'msg=audit\((?P<epoch>\d+)\.(?P<ms>\d+):(?P<serial>\d+)\)') ?? {}
+  epoch_s = to_int(ts_match.epoch) ?? null
+  epoch_ms = to_int(ts_match.ms) ?? 0
+
+  ts = if epoch_s != null {
+    epoch_s * 1000 + epoch_ms
+  } else {
+    to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  # Parse tous les key=value apres le header
+  kv_part = replace(raw_msg, r'^type=[A-Z_]+ msg=audit\([^)]+\): ?', "")
+  pairs = parse_key_value(kv_part, key_value_delimiter: "=", field_delimiter: " ") ?? {}
+
+  # Determiner la classe OCSF selon le type auditd
+  is_auth = audit_type == "USER_AUTH" || audit_type == "USER_LOGIN" || audit_type == "CRED_ACQ" || audit_type == "USER_ACCT"
+  class_uid = if is_auth { 3002 } else { 1003 }
+  category_uid = if is_auth { 3 } else { 1 }
+
+  # Severity : SYSCALL success=yes → info, success=no → medium
+  success = to_string(pairs.success) ?? ""
+  res = to_string(pairs.res) ?? ""
+  ocsf_severity = if success == "no" || res == "failed" { 3 } else { 1 }
+
+  .class_uid    = class_uid
+  .category_uid = category_uid
+  .severity_id  = ocsf_severity
+  .time         = ts
+
+  # Process info (SYSCALL/EXECVE)
+  .actor = {
+    "user": {
+      "uid":  to_string(pairs.uid) ?? null,
+      "name": to_string(pairs.auid) ?? null
+    },
+    "process": {
+      "pid":  to_int(pairs.pid) ?? null,
+      "name": to_string(pairs.comm) ?? to_string(pairs.exe) ?? null,
+      "cmd_line": to_string(pairs.proctitle) ?? null
+    }
+  }
+
+  .src_endpoint = {
+    "hostname": to_string(pairs.hostname) ?? null,
+    "ip":       to_string(pairs.addr) ?? null
+  }
+
+  .metadata = {
+    "product": {
+      "name":        "Linux auditd",
+      "vendor_name": "Linux"
+    },
+    "version": "1.0.0",
+    "uid":     to_string(ts_match.serial) ?? null
+  }
+
+  .unmapped = {
+    "audit_type": audit_type,
+    "syscall":    to_string(pairs.syscall) ?? null,
+    "arch":       to_string(pairs.arch) ?? null,
+    "key":        to_string(pairs.key) ?? null
+  }
+
+  .raw = del(.message)
+  del(.file)
+  del(.host)
+  del(.source_type)
+'''
+
+# --- FILTER : drop vides ---
+[transforms.filter_valid]
+type      = "filter"
+inputs    = ["parse_and_normalize"]
+condition = '.raw != null && .raw != ""'
+
+# --- SINK : Quickwit ---
+[sinks.quickwit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"

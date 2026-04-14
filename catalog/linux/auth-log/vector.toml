@@ -1,0 +1,128 @@
+# ==============================================================================
+# Linux auth.log — SSH, sudo, PAM authentication events
+# OCSF Class : 3002 (Authentication)
+# Input      : File (/var/log/auth.log)
+# Tested with: OpenSSH 8.x/9.x, sudo 1.9.x, Ubuntu/Debian
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.input]
+type    = "file"
+include = ["${AUTH_LOG_PATH:-/var/log/auth.log}"]
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.parse_and_normalize]
+type   = "remap"
+inputs = ["input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+
+  raw_msg = string!(.message)
+
+  # Parse syslog prefix : "Apr 14 10:23:45 hostname app[pid]: message"
+  parts = parse_regex(raw_msg, r'^(?P<timestamp>\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(?P<hostname>\S+)\s+(?P<app>\S+?)(?:\[(?P<pid>\d+)\])?:\s+(?P<msg>.+)$') ?? {}
+
+  hostname = to_string(parts.hostname) ?? "unknown"
+  app = to_string(parts.app) ?? "unknown"
+  pid = to_int(parts.pid) ?? null
+  msg = to_string(parts.msg) ?? raw_msg
+
+  # Determiner le type d'event et extraire les details
+  is_ssh_accept = match(msg, r'Accepted\s+(password|publickey)\s+for')
+  is_ssh_fail = match(msg, r'Failed\s+(password|publickey)\s+for')
+  is_ssh_invalid = match(msg, r'Invalid user')
+  is_sudo = match(msg, r'sudo:')
+  is_pam = match(msg, r'pam_unix\(')
+
+  # SSH accepted: "Accepted publickey for user from 1.2.3.4 port 54321 ssh2"
+  ssh_accept = parse_regex(msg, r'Accepted\s+(?P<method>\S+)\s+for\s+(?P<user>\S+)\s+from\s+(?P<ip>\S+)\s+port\s+(?P<port>\d+)') ?? {}
+
+  # SSH failed: "Failed password for user from 1.2.3.4 port 54321 ssh2"
+  # SSH failed invalid: "Failed password for invalid user admin from 1.2.3.4 port 54321 ssh2"
+  ssh_fail = parse_regex(msg, r'Failed\s+(?P<method>\S+)\s+for\s+(?:invalid user\s+)?(?P<user>\S+)\s+from\s+(?P<ip>\S+)\s+port\s+(?P<port>\d+)') ?? {}
+
+  # sudo: "user : TTY=pts/0 ; PWD=/home/user ; USER=root ; COMMAND=/usr/bin/apt update"
+  sudo_match = parse_regex(msg, r'(?P<user>\S+)\s+:\s+TTY=(?P<tty>\S+)\s+;\s+PWD=(?P<pwd>\S+)\s+;\s+USER=(?P<target_user>\S+)\s+;\s+COMMAND=(?P<command>.+)$') ?? {}
+
+  # Construire les champs en fonction du type
+  user_name = to_string(ssh_accept.user) ?? to_string(ssh_fail.user) ?? to_string(sudo_match.user) ?? null
+  src_ip = to_string(ssh_accept.ip) ?? to_string(ssh_fail.ip) ?? null
+  src_port = to_int(ssh_accept.port) ?? to_int(ssh_fail.port) ?? null
+  auth_method = to_string(ssh_accept.method) ?? to_string(ssh_fail.method) ?? null
+
+  # Severity et status
+  is_success = is_ssh_accept || (is_sudo && !match(msg, r'authentication failure'))
+  is_failure = is_ssh_fail || is_ssh_invalid || match(msg, r'authentication failure')
+  ocsf_severity = if is_failure { 3 } else { 1 }
+
+  status = if is_success { "Success" } else if is_failure { "Failure" } else { "Other" }
+  status_id = if is_success { 1 } else if is_failure { 2 } else { 0 }
+
+  activity = if is_ssh_accept || is_ssh_fail || is_ssh_invalid { "Logon" } else if is_sudo { "Privilege Escalation" } else { "Other" }
+  activity_id = if is_ssh_accept || is_ssh_fail || is_ssh_invalid { 1 } else if is_sudo { 5 } else { 0 }
+
+  .class_uid    = 3002
+  .category_uid = 3
+  .severity_id  = ocsf_severity
+  .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  .status       = status
+  .status_id    = status_id
+  .activity_name = activity
+  .activity_id  = activity_id
+
+  .actor = {
+    "user": {
+      "name": user_name
+    },
+    "process": {
+      "name": app,
+      "pid":  pid
+    }
+  }
+
+  .src_endpoint = {
+    "ip":       src_ip,
+    "port":     src_port,
+    "hostname": hostname
+  }
+
+  .auth_protocol = auth_method
+
+  .metadata = {
+    "product": {
+      "name":        "Linux auth.log",
+      "vendor_name": "Linux"
+    },
+    "version": "1.0.0"
+  }
+
+  .unmapped = {
+    "sudo_command":     to_string(sudo_match.command) ?? null,
+    "sudo_target_user": to_string(sudo_match.target_user) ?? null
+  }
+
+  .raw = del(.message)
+  del(.file)
+  del(.host)
+  del(.source_type)
+'''
+
+# --- FILTER : drop vides ---
+[transforms.filter_valid]
+type      = "filter"
+inputs    = ["parse_and_normalize"]
+condition = '.raw != null && .raw != ""'
+
+# --- SINK : Quickwit ---
+[sinks.quickwit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-identity/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"

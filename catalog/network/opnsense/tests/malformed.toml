@@ -1,0 +1,22 @@
+[[tests]]
+name = "OPNsense filterlog — malformed (too few fields)"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = "not,a,valid,filterlog,entry"
+  timestamp = "2024-04-14T10:00:00Z"
+  hostname  = "fw1"
+  appname   = "filterlog"
+
+# Should be dropped by filter_valid (class_uid != 4001)
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+'''

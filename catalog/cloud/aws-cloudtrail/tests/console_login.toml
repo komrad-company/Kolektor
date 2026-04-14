@@ -1,0 +1,44 @@
+[[tests]]
+name = "CloudTrail — ConsoleLogin success"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  eventVersion    = "1.08"
+  eventTime       = "2024-04-14T10:23:45Z"
+  eventSource     = "signin.amazonaws.com"
+  eventName       = "ConsoleLogin"
+  awsRegion       = "us-east-1"
+  sourceIPAddress = "203.0.113.50"
+  userAgent       = "Mozilla/5.0"
+  requestID       = "req-001"
+  eventID         = "evt-001"
+  eventType       = "AwsConsoleSignIn"
+
+  [tests.inputs.log_fields.userIdentity]
+  type      = "IAMUser"
+  arn       = "arn:aws:iam::123456789012:user/admin"
+  accountId = "123456789012"
+  userName  = "admin"
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6001)
+  assert_eq!(.category_uid, 6)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.status, "Success")
+  assert_eq!(.api.operation, "ConsoleLogin")
+  assert_eq!(.api.service.name, "signin")
+  assert_eq!(.actor.user.name, "admin")
+  assert_eq!(.actor.user.account_uid, "123456789012")
+  assert_eq!(.src_endpoint.ip, "203.0.113.50")
+  assert_eq!(.cloud.provider, "AWS")
+  assert_eq!(.cloud.region, "us-east-1")
+  assert_eq!(.metadata.product.name, "CloudTrail")
+'''

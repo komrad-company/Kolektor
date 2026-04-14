@@ -1,0 +1,56 @@
+# ==============================================================================
+# Sinks Quickwit reutilisables
+# Importer via: vector --config _lib/sinks.toml --config catalog/.../vector.toml
+# ==============================================================================
+
+# Sink pour OCSF Network Activity (4001)
+[sinks.quickwit_network]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit_network.request]
+headers.Content-Type = "application/x-ndjson"
+
+# Sink pour OCSF Identity (3001/3002)
+[sinks.quickwit_identity]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-identity/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit_identity.request]
+headers.Content-Type = "application/x-ndjson"
+
+# Sink pour OCSF Endpoint (1001/1003)
+[sinks.quickwit_endpoint]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit_endpoint.request]
+headers.Content-Type = "application/x-ndjson"
+
+# Sink pour OCSF Audit (6001)
+[sinks.quickwit_audit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-audit/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit_audit.request]
+headers.Content-Type = "application/x-ndjson"

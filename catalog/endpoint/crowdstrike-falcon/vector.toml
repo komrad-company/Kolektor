@@ -1,0 +1,150 @@
+# ==============================================================================
+# CrowdStrike Falcon — JSON syslog (Streaming API / SIEM Connector)
+# OCSF Class : 1003 (Process Activity) / 4001 (Network Activity) / 2001 (Detection)
+# Input      : Syslog TCP (JSON payload)
+# Tested with: CrowdStrike Falcon SIEM Connector, Streaming API v2
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.input]
+type    = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-1514}"
+mode    = "tcp"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.parse_and_normalize]
+type   = "remap"
+inputs = ["input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+
+  raw_msg = to_string(.message) ?? ""
+
+  # CrowdStrike envoie du JSON dans le champ message syslog
+  event = parse_json(raw_msg) ?? {}
+  valid = exists(event.metadata)
+
+  if valid {
+    meta = object(event.metadata) ?? {}
+    event_type = to_string(meta.eventType) ?? ""
+
+    # Classification
+    # DetectionSummaryEvent → 2001 (Security Finding)
+    # ProcessRollup2 → 1003 (Process Activity)
+    # NetworkContainmentEvent / NetworkDetection → 4001 (Network)
+    # default → 2001
+    is_detection = event_type == "DetectionSummaryEvent" || event_type == "IncidentSummaryEvent"
+    is_process = event_type == "ProcessRollup2" || event_type == "SyntheticProcessRollup2"
+    is_network = event_type == "NetworkContainmentEvent" || event_type == "NetworkDetection"
+
+    class_uid = if is_process { 1003 } else if is_network { 4001 } else { 2001 }
+    category_uid = if is_network { 4 } else if is_process { 1 } else { 2 }
+
+    # Severity : CrowdStrike severity 1-5 maps to OCSF 1-5
+    cs_severity = to_int(event.SeverityName) ?? to_int(meta.severity) ?? null
+    cs_severity_name = to_string(event.SeverityName) ?? ""
+    ocsf_severity = if cs_severity_name == "Critical" { 5 } else if cs_severity_name == "High" { 4 } else if cs_severity_name == "Medium" { 3 } else if cs_severity_name == "Low" { 2 } else { 1 }
+
+    # Timestamp
+    ts_raw = to_int(meta.eventCreationTime) ?? to_int(event.ProcessStartTime) ?? null
+    ts = if ts_raw != null { ts_raw } else { to_unix_timestamp(now(), unit: "milliseconds") }
+
+    .class_uid    = class_uid
+    .category_uid = category_uid
+    .severity_id  = ocsf_severity
+    .time         = ts
+
+    .actor = {
+      "user": {
+        "name": to_string(event.UserName) ?? null
+      },
+      "process": {
+        "pid":      to_int(event.ParentProcessId) ?? null,
+        "name":     to_string(event.ParentImageFileName) ?? null,
+        "cmd_line": to_string(event.ParentCommandLine) ?? null
+      }
+    }
+
+    .process = {
+      "pid":      to_int(event.TargetProcessId) ?? to_int(event.ProcessId) ?? null,
+      "name":     to_string(event.FileName) ?? to_string(event.ImageFileName) ?? null,
+      "cmd_line": to_string(event.CommandLine) ?? null,
+      "file": {
+        "hashes": [
+          { "algorithm": "SHA256", "value": to_string(event.SHA256String) ?? null }
+        ]
+      }
+    }
+
+    .src_endpoint = {
+      "ip":       to_string(event.LocalIP) ?? to_string(event.aip) ?? null,
+      "hostname": to_string(event.ComputerName) ?? null
+    }
+
+    .dst_endpoint = {
+      "ip":   to_string(event.RemoteIP) ?? null,
+      "port": to_int(event.RemotePort) ?? null
+    }
+
+    .finding_info = {
+      "title":    to_string(event.DetectName) ?? to_string(event.DetectDescription) ?? null,
+      "uid":      to_string(event.DetectId) ?? to_string(meta.eventId) ?? null,
+      "types":    [to_string(event.Tactic) ?? ""],
+      "analytic": {
+        "uid":  to_string(event.Technique) ?? null,
+        "name": to_string(event.TechniqueId) ?? null
+      }
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "CrowdStrike Falcon",
+        "vendor_name": "CrowdStrike"
+      },
+      "version": "1.0.0",
+      "uid":     to_string(meta.eventId) ?? null
+    }
+
+    .unmapped = {
+      "event_type":   event_type,
+      "customer_id":  to_string(meta.customerIDString) ?? null,
+      "falcon_host_link": to_string(event.FalconHostLink) ?? null
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  .raw = del(.message)
+  del(.timestamp)
+  del(.hostname)
+  del(.appname)
+  del(.facility)
+  del(.severity)
+  del(.procid)
+  del(.msgid)
+  del(.version)
+  del(.source_type)
+'''
+
+# --- FILTER ---
+[transforms.filter_valid]
+type      = "filter"
+inputs    = ["parse_and_normalize"]
+condition = '.class_uid != 0'
+
+# --- SINK : Quickwit ---
+[sinks.quickwit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"

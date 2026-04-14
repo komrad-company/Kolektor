@@ -1,0 +1,121 @@
+# ==============================================================================
+# Nginx — combined access log + error log
+# OCSF Class : 4001 (Network Activity) / 6002 (Web Resources Activity)
+# Input      : File or Syslog
+# Tested with: nginx 1.24.x / 1.26.x
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.input]
+type    = "file"
+include = ["${NGINX_ACCESS_LOG:-/var/log/nginx/access.log}"]
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.parse_and_normalize]
+type   = "remap"
+inputs = ["input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+
+  raw_msg = string!(.message)
+
+  # Nginx combined log format :
+  # 10.0.0.1 - user [14/Apr/2024:10:23:45 +0000] "GET /path HTTP/1.1" 200 1234 "https://ref.com" "Mozilla/5.0 ..."
+  parsed = parse_regex(raw_msg, r'^(?P<remote_addr>\S+)\s+-\s+(?P<remote_user>\S+)\s+\[(?P<time_local>[^\]]+)\]\s+"(?P<method>\S+)\s+(?P<uri>\S+)\s+(?P<protocol>[^"]+)"\s+(?P<status>\d+)\s+(?P<body_bytes>\d+)\s+"(?P<referer>[^"]*?)"\s+"(?P<user_agent>[^"]*?)"') ?? {}
+
+  valid = to_string(parsed.remote_addr) ?? "" != ""
+
+  if valid {
+    remote_addr = to_string(parsed.remote_addr) ?? ""
+    method = to_string(parsed.method) ?? ""
+    uri = to_string(parsed.uri) ?? ""
+    protocol = to_string(parsed.protocol) ?? ""
+    status_code = to_int(parsed.status) ?? 0
+    body_bytes = to_int(parsed.body_bytes) ?? 0
+    user_agent = to_string(parsed.user_agent) ?? ""
+    referer = to_string(parsed.referer) ?? ""
+    remote_user = to_string(parsed.remote_user) ?? "-"
+
+    # Parse timestamp : 14/Apr/2024:10:23:45 +0000
+    ts_str = to_string(parsed.time_local) ?? ""
+    parsed_ts = parse_timestamp(ts_str, format: "%d/%b/%Y:%H:%M:%S %z") ?? null
+    ts = if parsed_ts != null { to_unix_timestamp(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+
+    # Severity based on HTTP status
+    ocsf_severity = if status_code >= 500 { 4 } else if status_code >= 400 { 2 } else { 1 }
+
+    .class_uid    = 4001
+    .category_uid = 4
+    .severity_id  = ocsf_severity
+    .time         = ts
+
+    .http_request = {
+      "http_method": method,
+      "url": {
+        "path":     uri,
+        "scheme":   "http"
+      },
+      "version":    protocol,
+      "referrer":   if referer != "-" { referer } else { null },
+      "user_agent": user_agent
+    }
+
+    .http_response = {
+      "code": status_code
+    }
+
+    .src_endpoint = {
+      "ip": remote_addr
+    }
+
+    .actor = {
+      "user": {
+        "name": if remote_user != "-" { remote_user } else { null }
+      }
+    }
+
+    .traffic = {
+      "bytes_out": body_bytes
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "nginx",
+        "vendor_name": "F5/nginx"
+      },
+      "version": "1.0.0"
+    }
+
+    .unmapped = {}
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  .raw = del(.message)
+  del(.file)
+  del(.host)
+  del(.source_type)
+'''
+
+# --- FILTER : drop malformed ---
+[transforms.filter_valid]
+type      = "filter"
+inputs    = ["parse_and_normalize"]
+condition = '.class_uid == 4001'
+
+# --- SINK : Quickwit ---
+[sinks.quickwit]
+type                = "http"
+inputs              = ["filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"

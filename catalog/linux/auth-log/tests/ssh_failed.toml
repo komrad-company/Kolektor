@@ -1,0 +1,45 @@
+[[tests]]
+name = "auth-log — SSH failed password"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = "Apr 14 10:24:01 web01 sshd[12346]: Failed password for root from 185.220.101.42 port 44820 ssh2"
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3002)
+  assert_eq!(.severity_id, 3)
+  assert_eq!(.status, "Failure")
+  assert_eq!(.status_id, 2)
+  assert_eq!(.actor.user.name, "root")
+  assert_eq!(.src_endpoint.ip, "185.220.101.42")
+  assert_eq!(.auth_protocol, "password")
+'''
+
+[[tests]]
+name = "auth-log — SSH failed invalid user"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = "Apr 14 10:25:00 web01 sshd[12347]: Failed password for invalid user admin from 192.168.1.100 port 55555 ssh2"
+
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.status, "Failure")
+  assert_eq!(.actor.user.name, "admin")
+  assert_eq!(.src_endpoint.ip, "192.168.1.100")
+'''
