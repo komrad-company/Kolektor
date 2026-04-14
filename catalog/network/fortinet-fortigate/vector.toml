@@ -37,8 +37,8 @@ source = '''
 
   if valid {
     # Timestamp : date=YYYY-MM-DD time=HH:MM:SS
-    date_str = kv.date
-    time_str = kv.time
+    date_str = string(kv.date) ?? ""
+    time_str = string(kv.time) ?? ""
     ts_str = date_str + "T" + time_str + "Z"
     parsed_ts = parse_timestamp(ts_str, format: "%Y-%m-%dT%H:%M:%SZ") ?? null
     .time = if parsed_ts != null {

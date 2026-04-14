@@ -35,8 +35,8 @@ source = '''
     ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp!(now(), unit: "milliseconds") }
 
     # Error = failure
-    error_code = to_string(.errorCode)
-    error_msg = to_string(.errorMessage)
+    error_code = to_string(.errorCode) ?? null
+    error_msg = to_string(.errorMessage) ?? null
     is_error = error_code != null
 
     ocsf_severity = if is_error { 3 } else { 1 }
