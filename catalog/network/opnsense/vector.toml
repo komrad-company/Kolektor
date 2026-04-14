@@ -39,20 +39,20 @@ source = '''
   valid = field_count >= 20
 
   if valid {
-    action_raw = fields[6] ?? ""
-    direction = fields[7] ?? ""
-    ip_version = fields[8] ?? "4"
-    proto = fields[16] ?? ""
-    src_ip = fields[18] ?? ""
-    dst_ip = fields[19] ?? ""
+    action_raw = fields[6]
+    direction = fields[7]
+    ip_version = fields[8]
+    proto = fields[16]
+    src_ip = fields[18]
+    dst_ip = fields[19]
 
-    src_port_str = if field_count > 20 { fields[20] ?? "" } else { "" }
-    dst_port_str = if field_count > 21 { fields[21] ?? "" } else { "" }
+    src_port_str = if field_count > 20 { fields[20] } else { "" }
+    dst_port_str = if field_count > 21 { fields[21] } else { "" }
     src_port = if src_port_str != "" { to_int!(src_port_str) } else { null }
     dst_port = if dst_port_str != "" { to_int!(dst_port_str) } else { null }
-    proto_num_raw = fields[15] ?? null
+    proto_num_raw = fields[15]
     proto_num = if proto_num_raw != null { to_int!(proto_num_raw) } else { null }
-    interface = fields[4] ?? ""
+    interface = fields[4]
 
     ocsf_action = if action_raw == "pass" { "Allow" } else { "Deny" }
     ocsf_action_id = if action_raw == "pass" { 1 } else { 2 }
@@ -87,7 +87,7 @@ source = '''
       "version": "1.0.0"
     }
 
-    rule_nr = fields[0] ?? ""
+    rule_nr = fields[0]
 
     .unmapped = {
       "interface":  interface,

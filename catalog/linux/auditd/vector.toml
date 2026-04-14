@@ -24,16 +24,16 @@ source = '''
 
   # Extraire le type d'event
   type_match = parse_regex(raw_msg, r'^type=(?P<type>[A-Z_]+)') ?? {}
-  audit_type = type_match.type ?? ""
+  audit_type = type_match.type
 
   # Extraire le timestamp depuis msg=audit(EPOCH.MS:SERIAL)
   ts_match = parse_regex(raw_msg, r'msg=audit\((?P<epoch>\d+)\.(?P<ms>\d+):(?P<serial>\d+)\)') ?? {}
-  epoch_s = ts_match.epoch ?? null
-  epoch_ms_raw = ts_match.ms ?? null
+  epoch_s = ts_match.epoch
+  epoch_ms_raw = ts_match.ms
 
   # Calculer le timestamp en millisecondes
   if epoch_s != null {
-    .time = to_int!(epoch_s) * 1000 + to_int!(epoch_ms_raw ?? "0")
+    .time = to_int!(epoch_s) * 1000 + to_int!(epoch_ms_raw)
   } else {
     .time = to_unix_timestamp!(now(), unit: "milliseconds")
   }
@@ -48,8 +48,8 @@ source = '''
   category_uid = if is_auth { 3 } else { 1 }
 
   # Severity : SYSCALL success=yes → info, success=no → medium
-  success = pairs.success ?? ""
-  res = pairs.res ?? ""
+  success = pairs.success
+  res = pairs.res
   ocsf_severity = if success == "no" || res == "failed" { 3 } else { 1 }
 
   .class_uid    = class_uid
@@ -57,12 +57,12 @@ source = '''
   .severity_id  = ocsf_severity
 
   # Process info (SYSCALL/EXECVE)
-  uid_val = pairs.uid ?? null
-  auid_val = pairs.auid ?? null
-  pid_raw = pairs.pid ?? null
+  uid_val = pairs.uid
+  auid_val = pairs.auid
+  pid_raw = pairs.pid
   pid_val = if pid_raw != null { to_int!(pid_raw) } else { null }
-  comm_val = pairs.comm ?? pairs.exe ?? null
-  proctitle_val = pairs.proctitle ?? null
+  comm_val = pairs.comm
+  proctitle_val = pairs.proctitle
 
   .actor = {
     "user": {
@@ -76,15 +76,15 @@ source = '''
     }
   }
 
-  hostname_val = pairs.hostname ?? null
-  addr_val = pairs.addr ?? null
+  hostname_val = pairs.hostname
+  addr_val = pairs.addr
 
   .src_endpoint = {
     "hostname": hostname_val,
     "ip":       addr_val
   }
 
-  serial_val = ts_match.serial ?? null
+  serial_val = ts_match.serial
 
   .metadata = {
     "product": {
@@ -95,9 +95,9 @@ source = '''
     "uid":     serial_val
   }
 
-  syscall_val = pairs.syscall ?? null
-  arch_val = pairs.arch ?? null
-  key_val = pairs.key ?? null
+  syscall_val = pairs.syscall
+  arch_val = pairs.arch
+  key_val = pairs.key
 
   .unmapped = {
     "audit_type": audit_type,

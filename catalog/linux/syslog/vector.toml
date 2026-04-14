@@ -26,10 +26,10 @@ source = '''
   sev = to_int!(.severity)
   ocsf_severity = if sev <= 2 { 5 } else if sev <= 3 { 4 } else if sev <= 4 { 3 } else if sev <= 5 { 2 } else { 1 }
 
-  appname = .appname ?? "unknown"
-  hostname = .hostname ?? "unknown"
-  facility = .facility ?? null
-  procid_val = .procid ?? null
+  appname = .appname
+  hostname = .hostname
+  facility = .facility
+  procid_val = .procid
   procid_int = if procid_val != null { to_int!(procid_val) } else { null }
 
   .class_uid    = 6001

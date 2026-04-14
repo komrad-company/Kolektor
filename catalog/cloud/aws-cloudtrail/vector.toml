@@ -24,19 +24,19 @@ source = '''
   # sourceIPAddress, userAgent, userIdentity.{type, arn, accountId, userName},
   # requestParameters, responseElements, errorCode, errorMessage
 
-  event_name = to_string(.eventName) ?? ""
-  event_source = to_string(.eventSource) ?? ""
+  event_name = to_string!(.eventName)
+  event_source = to_string!(.eventSource)
   valid = event_name != ""
 
   if valid {
     # Timestamp : ISO 8601
-    ts_str = to_string(.eventTime) ?? ""
+    ts_str = to_string!(.eventTime)
     parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
     ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp!(now(), unit: "milliseconds") }
 
     # Error = failure
-    error_code = to_string(.errorCode) ?? null
-    error_msg = to_string(.errorMessage) ?? null
+    error_code = to_string(.errorCode)
+    error_msg = to_string(.errorMessage)
     is_error = error_code != null
 
     ocsf_severity = if is_error { 3 } else { 1 }
@@ -45,10 +45,10 @@ source = '''
 
     # User identity
     user_identity = object(.userIdentity) ?? {}
-    user_type = to_string(user_identity.type) ?? ""
-    user_arn = to_string(user_identity.arn) ?? null
-    user_name = to_string(user_identity.userName) ?? to_string(user_identity.principalId) ?? null
-    account_id = to_string(user_identity.accountId) ?? null
+    user_type = to_string!(user_identity.type)
+    user_arn = to_string(user_identity.arn)
+    user_name = user_identity.userName
+    account_id = to_string(user_identity.accountId)
 
     # Service name from eventSource (e.g. "ec2.amazonaws.com" → "ec2")
     service_name = replace(event_source, r'\.amazonaws\.com$', "")
@@ -66,7 +66,7 @@ source = '''
         "name": service_name
       },
       "request": {
-        "uid": to_string(.requestID) ?? null
+        "uid": to_string(.requestID)
       },
       "response": {
         "error":         error_code,
@@ -84,16 +84,16 @@ source = '''
     }
 
     .src_endpoint = {
-      "ip": to_string(.sourceIPAddress) ?? null
+      "ip": to_string(.sourceIPAddress)
     }
 
     .http_request = {
-      "user_agent": to_string(.userAgent) ?? null
+      "user_agent": to_string(.userAgent)
     }
 
     .cloud = {
       "provider": "AWS",
-      "region":   to_string(.awsRegion) ?? null,
+      "region":   to_string(.awsRegion),
       "account_uid": account_id
     }
 
@@ -102,16 +102,16 @@ source = '''
         "name":        "CloudTrail",
         "vendor_name": "AWS"
       },
-      "version": to_string(.eventVersion) ?? "1.0.0",
-      "uid":     to_string(.eventID) ?? null
+      "version": to_string(.eventVersion),
+      "uid":     to_string(.eventID)
     }
 
     .unmapped = {
-      "event_type":          to_string(.eventType) ?? null,
-      "event_category":      to_string(.eventCategory) ?? null,
-      "management_event":    .managementEvent ?? null,
-      "read_only":           .readOnly ?? null,
-      "recipient_account_id": to_string(.recipientAccountId) ?? null
+      "event_type":          to_string(.eventType),
+      "event_category":      to_string(.eventCategory),
+      "management_event":    .managementEvent,
+      "read_only":           .readOnly,
+      "recipient_account_id": to_string(.recipientAccountId)
     }
   } else {
     .class_uid    = 0

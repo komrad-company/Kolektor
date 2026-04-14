@@ -23,11 +23,11 @@ source = '''
   # Parse syslog prefix : "Apr 14 10:23:45 hostname app[pid]: message"
   parts = parse_regex(raw_msg, r'^(?P<timestamp>\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(?P<hostname>\S+)\s+(?P<app>\S+?)(?:\[(?P<pid>\d+)\])?:\s+(?P<msg>.+)$') ?? {}
 
-  hostname = parts.hostname ?? "unknown"
-  app = parts.app ?? "unknown"
-  pid_raw = parts.pid ?? null
+  hostname = parts.hostname
+  app = parts.app
+  pid_raw = parts.pid
   pid = if pid_raw != null { to_int!(pid_raw) } else { null }
-  msg = parts.msg ?? raw_msg
+  msg = parts.msg
 
   # Determiner le type d'event et extraire les details
   is_ssh_accept = match(msg, r'Accepted\s+(password|publickey)\s+for')
@@ -47,11 +47,11 @@ source = '''
   sudo_match = parse_regex(msg, r'(?P<user>\S+)\s+:\s+TTY=(?P<tty>\S+)\s+;\s+PWD=(?P<pwd>\S+)\s+;\s+USER=(?P<target_user>\S+)\s+;\s+COMMAND=(?P<command>.+)$') ?? {}
 
   # Construire les champs en fonction du type
-  user_name = ssh_accept.user ?? ssh_fail.user ?? sudo_match.user ?? null
-  src_ip = ssh_accept.ip ?? ssh_fail.ip ?? null
-  src_port_raw = ssh_accept.port ?? ssh_fail.port ?? null
+  user_name = ssh_accept.user
+  src_ip = ssh_accept.ip
+  src_port_raw = ssh_accept.port
   src_port = if src_port_raw != null { to_int!(src_port_raw) } else { null }
-  auth_method = ssh_accept.method ?? ssh_fail.method ?? null
+  auth_method = ssh_accept.method
 
   # Severity et status
   is_success = is_ssh_accept || (is_sudo && !match(msg, r'authentication failure'))
@@ -99,8 +99,8 @@ source = '''
     "version": "1.0.0"
   }
 
-  sudo_cmd = sudo_match.command ?? null
-  sudo_target = sudo_match.target_user ?? null
+  sudo_cmd = sudo_match.command
+  sudo_target = sudo_match.target_user
 
   .unmapped = {
     "sudo_command":     sudo_cmd,
