@@ -6,7 +6,8 @@ insert_at = "parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = ""
+  message   = ""
+  timestamp = "2024-04-14T10:24:01.000Z"
 
   [tests.inputs.log_fields.winlog]
   event_id      = 4625
@@ -22,9 +23,6 @@ type      = "log"
     IpPort            = "44820"
     FailureReason     = "%%2313"
     SubStatus         = "0xC000006A"
-
-  [tests.inputs.log_fields]
-  timestamp = "2024-04-14T10:24:01.000Z"
 
 [[tests.outputs]]
 extract_from = "parse_and_normalize"

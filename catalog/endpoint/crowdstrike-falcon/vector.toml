@@ -55,20 +55,26 @@ source = '''
     .severity_id  = ocsf_severity
     .time         = ts
 
+    # Use explicit null checks — to_int(null)=0 and to_string(null)="" are infallible,
+    # so the ?? fallback never fires when the field is missing.
+    proc_name = if event.FileName != null { to_string!(event.FileName) } else if event.ImageFileName != null { to_string!(event.ImageFileName) } else { null }
+    proc_pid = if event.TargetProcessId != null { to_int!(event.TargetProcessId) } else if event.ProcessId != null { to_int!(event.ProcessId) } else { null }
+    actor_pid = if event.ParentProcessId != null { to_int!(event.ParentProcessId) } else { null }
+
     .actor = {
       "user": {
         "name": to_string(event.UserName) ?? null
       },
       "process": {
-        "pid":      to_int(event.ParentProcessId) ?? null,
+        "pid":      actor_pid,
         "name":     to_string(event.ParentImageFileName) ?? null,
         "cmd_line": to_string(event.ParentCommandLine) ?? null
       }
     }
 
     .process = {
-      "pid":      to_int(event.TargetProcessId) ?? to_int(event.ProcessId) ?? null,
-      "name":     to_string(event.FileName) ?? to_string(event.ImageFileName) ?? null,
+      "pid":      proc_pid,
+      "name":     proc_name,
       "cmd_line": to_string(event.CommandLine) ?? null,
       "file": {
         "hashes": [

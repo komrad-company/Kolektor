@@ -32,8 +32,8 @@ source = '''
   fgt_action = kv.action
   fgt_level = kv.level
 
-  # Valider qu'on a bien un log FortiGate
-  valid = fgt_type != ""
+  # Valider qu'on a bien un log FortiGate (null != "" est true en VRL, utiliser is_string)
+  valid = is_string(fgt_type) && fgt_type != ""
 
   if valid {
     # Timestamp : date=YYYY-MM-DD time=HH:MM:SS

@@ -35,7 +35,7 @@ source = '''
   .class_uid    = 6001
   .category_uid = 6
   .severity_id  = ocsf_severity
-  .time         = to_unix_timestamp!(.timestamp, unit: "milliseconds")
+  .time         = to_unix_timestamp(.timestamp, unit: "milliseconds") ?? to_unix_timestamp(now(), unit: "milliseconds")
 
   .api = {
     "operation": appname,
