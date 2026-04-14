@@ -21,18 +21,18 @@ source = '''
   .datasource_id = "${DATASOURCE_ID}"
 
   # Winlogbeat JSON structure :
-  # .winlog.event_id, .winlog.event_data.*, .winlog.computer_name, .@timestamp
+  # .winlog.event_id, .winlog.event_data.*, .winlog.computer_name, .timestamp
   event_id = to_int(.winlog.event_id) ?? to_int(.event_id) ?? 0
   event_data = object(.winlog.event_data) ?? object(.event_data) ?? {}
   computer = to_string(.winlog.computer_name) ?? to_string(.computer_name) ?? "unknown"
 
   # Timestamp
-  ts_str = to_string(.["@timestamp"]) ?? to_string(.timestamp) ?? null
+  ts_str = to_string(.timestamp) ?? null
   ts = if ts_str != null {
     parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-    if parsed_ts != null { to_unix_timestamp(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+    if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp!(now(), unit: "milliseconds") }
   } else {
-    to_unix_timestamp(now(), unit: "milliseconds")
+    to_unix_timestamp!(now(), unit: "milliseconds")
   }
 
   # Classification par Event ID
@@ -114,7 +114,6 @@ source = '''
   .raw = del(.message)
   del(.winlog)
   del(.event_data)
-  del(.["@timestamp"])
   del(.timestamp)
   del(.computer_name)
   del(.event_id)

@@ -19,7 +19,7 @@ source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
 
-  raw_msg = to_string(.message) ?? ""
+  raw_msg = string!(.message)
 
   # FortiGate log format : key=value key="quoted value" ...
   # date=2024-04-14 time=10:23:45 devname="FG100F" devid="FG100FXXXXXXXXXX"
@@ -27,21 +27,25 @@ source = '''
   # srcip=10.0.0.5 srcport=54321 dstip=8.8.8.8 dstport=443 ...
   kv = parse_key_value(raw_msg, key_value_delimiter: "=", field_delimiter: " ") ?? {}
 
-  fgt_type = to_string(kv.type) ?? ""
-  fgt_subtype = to_string(kv.subtype) ?? ""
-  fgt_action = to_string(kv.action) ?? ""
-  fgt_level = to_string(kv.level) ?? "notice"
+  fgt_type = kv.type ?? ""
+  fgt_subtype = kv.subtype ?? ""
+  fgt_action = kv.action ?? ""
+  fgt_level = kv.level ?? "notice"
 
   # Valider qu'on a bien un log FortiGate
   valid = fgt_type != ""
 
   if valid {
     # Timestamp : date=YYYY-MM-DD time=HH:MM:SS
-    date_str = to_string(kv.date) ?? ""
-    time_str = to_string(kv.time) ?? ""
+    date_str = kv.date ?? ""
+    time_str = kv.time ?? ""
     ts_str = date_str + "T" + time_str + "Z"
     parsed_ts = parse_timestamp(ts_str, format: "%Y-%m-%dT%H:%M:%SZ") ?? null
-    ts = if parsed_ts != null { to_unix_timestamp(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+    .time = if parsed_ts != null {
+      to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+    } else {
+      to_unix_timestamp!(now(), unit: "milliseconds")
+    }
 
     # Action OCSF
     ocsf_action = if fgt_action == "accept" || fgt_action == "allow" || fgt_action == "passthrough" {
@@ -71,30 +75,53 @@ source = '''
     .class_uid    = 4001
     .category_uid = 4
     .severity_id  = ocsf_severity
-    .time         = ts
     .action       = ocsf_action
     .action_id    = ocsf_action_id
 
+    srcip = kv.srcip ?? null
+    srcport_raw = kv.srcport ?? null
+    srcport = if srcport_raw != null { to_int!(srcport_raw) } else { null }
+    dstip = kv.dstip ?? null
+    dstport_raw = kv.dstport ?? null
+    dstport = if dstport_raw != null { to_int!(dstport_raw) } else { null }
+
     .src_endpoint = {
-      "ip":   to_string(kv.srcip) ?? null,
-      "port": to_int(kv.srcport) ?? null
+      "ip":   srcip,
+      "port": srcport
     }
     .dst_endpoint = {
-      "ip":   to_string(kv.dstip) ?? null,
-      "port": to_int(kv.dstport) ?? null
-    }
-    .connection_info = {
-      "protocol_num": to_int(kv.proto) ?? null,
-      "protocol_name": to_string(kv.service) ?? null,
-      "direction":     to_string(kv.direction) ?? null
+      "ip":   dstip,
+      "port": dstport
     }
 
-    .traffic = {
-      "bytes_in":    to_int(kv.rcvdbyte) ?? null,
-      "bytes_out":   to_int(kv.sentbyte) ?? null,
-      "packets_in":  to_int(kv.rcvdpkt) ?? null,
-      "packets_out": to_int(kv.sentpkt) ?? null
+    proto_raw = kv.proto ?? null
+    proto_num = if proto_raw != null { to_int!(proto_raw) } else { null }
+    service_name = kv.service ?? null
+    direction_val = kv.direction ?? null
+
+    .connection_info = {
+      "protocol_num": proto_num,
+      "protocol_name": service_name,
+      "direction":     direction_val
     }
+
+    rcvdbyte_raw = kv.rcvdbyte ?? null
+    sentbyte_raw = kv.sentbyte ?? null
+    rcvdpkt_raw = kv.rcvdpkt ?? null
+    sentpkt_raw = kv.sentpkt ?? null
+    bytes_in = if rcvdbyte_raw != null { to_int!(rcvdbyte_raw) } else { null }
+    bytes_out = if sentbyte_raw != null { to_int!(sentbyte_raw) } else { null }
+    packets_in = if rcvdpkt_raw != null { to_int!(rcvdpkt_raw) } else { null }
+    packets_out = if sentpkt_raw != null { to_int!(sentpkt_raw) } else { null }
+
+    .traffic = {
+      "bytes_in":    bytes_in,
+      "bytes_out":   bytes_out,
+      "packets_in":  packets_in,
+      "packets_out": packets_out
+    }
+
+    logid_val = kv.logid ?? null
 
     .metadata = {
       "product": {
@@ -102,25 +129,34 @@ source = '''
         "vendor_name": "Fortinet"
       },
       "version": "1.0.0",
-      "uid":     to_string(kv.logid) ?? null
+      "uid":     logid_val
     }
+
+    policyid_val = kv.policyid ?? null
+    devname_val = kv.devname ?? null
+    srcintf_val = kv.srcintf ?? null
+    dstintf_val = kv.dstintf ?? null
+    duration_raw = kv.duration ?? null
+    duration_val = if duration_raw != null { to_int!(duration_raw) } else { null }
+    appcat_val = kv.appcat ?? null
+    app_val = kv.app ?? null
 
     .unmapped = {
       "type":     fgt_type,
       "subtype":  fgt_subtype,
-      "policyid": to_string(kv.policyid) ?? null,
-      "devname":  to_string(kv.devname) ?? null,
-      "srcintf":  to_string(kv.srcintf) ?? null,
-      "dstintf":  to_string(kv.dstintf) ?? null,
-      "duration": to_int(kv.duration) ?? null,
-      "appcat":   to_string(kv.appcat) ?? null,
-      "app":      to_string(kv.app) ?? null
+      "policyid": policyid_val,
+      "devname":  devname_val,
+      "srcintf":  srcintf_val,
+      "dstintf":  dstintf_val,
+      "duration": duration_val,
+      "appcat":   appcat_val,
+      "app":      app_val
     }
   } else {
     .class_uid    = 0
     .category_uid = 0
     .severity_id  = 0
-    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+    .time         = to_unix_timestamp!(now(), unit: "milliseconds")
   }
 
   .raw = del(.message)

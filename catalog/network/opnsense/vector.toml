@@ -19,7 +19,7 @@ source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
 
-  raw_msg = to_string(.message) ?? ""
+  raw_msg = string!(.message)
 
   # filterlog CSV format (OPNsense) :
   # rulenr,subrulenr,anchorname,label,interface,reason,action,direction,ip_version,...
@@ -39,19 +39,20 @@ source = '''
   valid = field_count >= 20
 
   if valid {
-    action_raw = to_string(fields[6]) ?? ""
-    direction = to_string(fields[7]) ?? ""
-    ip_version = to_string(fields[8]) ?? "4"
-    proto = to_string(fields[16]) ?? ""
-    src_ip = to_string(fields[18]) ?? ""
-    dst_ip = to_string(fields[19]) ?? ""
+    action_raw = fields[6] ?? ""
+    direction = fields[7] ?? ""
+    ip_version = fields[8] ?? "4"
+    proto = fields[16] ?? ""
+    src_ip = fields[18] ?? ""
+    dst_ip = fields[19] ?? ""
 
-    src_port_raw = if field_count > 20 { to_string(fields[20]) ?? "" } else { "" }
-    dst_port_raw = if field_count > 21 { to_string(fields[21]) ?? "" } else { "" }
-    src_port = to_int(src_port_raw) ?? null
-    dst_port = to_int(dst_port_raw) ?? null
-    proto_num = to_int(fields[15]) ?? null
-    interface = to_string(fields[4]) ?? ""
+    src_port_str = if field_count > 20 { fields[20] ?? "" } else { "" }
+    dst_port_str = if field_count > 21 { fields[21] ?? "" } else { "" }
+    src_port = if src_port_str != "" { to_int!(src_port_str) } else { null }
+    dst_port = if dst_port_str != "" { to_int!(dst_port_str) } else { null }
+    proto_num_raw = fields[15] ?? null
+    proto_num = if proto_num_raw != null { to_int!(proto_num_raw) } else { null }
+    interface = fields[4] ?? ""
 
     ocsf_action = if action_raw == "pass" { "Allow" } else { "Deny" }
     ocsf_action_id = if action_raw == "pass" { 1 } else { 2 }
@@ -60,7 +61,7 @@ source = '''
     .class_uid    = 4001
     .category_uid = 4
     .severity_id  = ocsf_severity
-    .time         = to_unix_timestamp(.timestamp ?? now(), unit: "milliseconds")
+    .time         = to_unix_timestamp!(.timestamp, unit: "milliseconds")
     .action       = ocsf_action
     .action_id    = ocsf_action_id
 
@@ -86,16 +87,18 @@ source = '''
       "version": "1.0.0"
     }
 
+    rule_nr = fields[0] ?? ""
+
     .unmapped = {
       "interface":  interface,
-      "rule_nr":    to_string(fields[0]) ?? "",
+      "rule_nr":    rule_nr,
       "ip_version": ip_version
     }
   } else {
     .class_uid    = 0
     .category_uid = 0
     .severity_id  = 0
-    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+    .time         = to_unix_timestamp!(now(), unit: "milliseconds")
   }
 
   .raw = del(.message)

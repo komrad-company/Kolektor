@@ -32,7 +32,7 @@ source = '''
     # Timestamp : ISO 8601
     ts_str = to_string(.eventTime) ?? ""
     parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-    ts = if parsed_ts != null { to_unix_timestamp(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+    ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp!(now(), unit: "milliseconds") }
 
     # Error = failure
     error_code = to_string(.errorCode) ?? null
@@ -117,7 +117,7 @@ source = '''
     .class_uid    = 0
     .category_uid = 0
     .severity_id  = 0
-    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+    .time         = to_unix_timestamp!(now(), unit: "milliseconds")
   }
 
   .raw = encode_json(.)

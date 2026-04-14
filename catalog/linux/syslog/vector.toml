@@ -23,28 +23,34 @@ source = '''
   # .timestamp, .hostname, .appname, .facility, .severity, .message
   # On normalise en OCSF
 
-  sev = to_int(.severity) ?? 6
+  sev = to_int!(.severity)
   ocsf_severity = if sev <= 2 { 5 } else if sev <= 3 { 4 } else if sev <= 4 { 3 } else if sev <= 5 { 2 } else { 1 }
+
+  appname = .appname ?? "unknown"
+  hostname = .hostname ?? "unknown"
+  facility = .facility ?? null
+  procid_val = .procid ?? null
+  procid_int = if procid_val != null { to_int!(procid_val) } else { null }
 
   .class_uid    = 6001
   .category_uid = 6
   .severity_id  = ocsf_severity
-  .time         = to_unix_timestamp(.timestamp ?? now(), unit: "milliseconds")
+  .time         = to_unix_timestamp!(.timestamp, unit: "milliseconds")
 
   .api = {
-    "operation": to_string(.appname) ?? "unknown",
+    "operation": appname,
     "service": { "name": "syslog" }
   }
 
   .actor = {
     "process": {
-      "name": to_string(.appname) ?? "unknown",
-      "pid":  to_int(.procid) ?? null
+      "name": appname,
+      "pid":  procid_int
     }
   }
 
   .src_endpoint = {
-    "hostname": to_string(.hostname) ?? "unknown"
+    "hostname": hostname
   }
 
   .metadata = {
@@ -53,7 +59,7 @@ source = '''
       "vendor_name": "Linux"
     },
     "version": "1.0.0",
-    "log_provider": to_string(.facility) ?? null
+    "log_provider": facility
   }
 
   .raw = del(.message)
