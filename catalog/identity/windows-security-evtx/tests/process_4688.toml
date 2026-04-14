@@ -20,7 +20,7 @@ type      = "log"
     CommandLine       = "cmd.exe /c whoami"
 
   [tests.inputs.log_fields]
-  "@timestamp" = "2024-04-14T11:00:00.000Z"
+  timestamp = "2024-04-14T11:00:00.000Z"
 
 [[tests.outputs]]
 extract_from = "parse_and_normalize"
@@ -52,7 +52,7 @@ type      = "log"
   computer_name = "DC01"
 
   [tests.inputs.log_fields]
-  "@timestamp" = "2024-04-14T12:00:00.000Z"
+  timestamp = "2024-04-14T12:00:00.000Z"
 
 # No output expected — dropped by filter_valid
 [[tests.outputs]]

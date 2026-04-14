@@ -23,19 +23,19 @@ source = '''
   raw_msg = string!(.message)
 
   # Extraire le type d'event
-  audit_type = ""
   type_match = parse_regex(raw_msg, r'^type=(?P<type>[A-Z_]+)') ?? {}
-  audit_type = to_string(type_match.type) ?? ""
+  audit_type = type_match.type ?? ""
 
   # Extraire le timestamp depuis msg=audit(EPOCH.MS:SERIAL)
   ts_match = parse_regex(raw_msg, r'msg=audit\((?P<epoch>\d+)\.(?P<ms>\d+):(?P<serial>\d+)\)') ?? {}
-  epoch_s = to_int(ts_match.epoch) ?? null
-  epoch_ms = to_int(ts_match.ms) ?? 0
+  epoch_s = ts_match.epoch ?? null
+  epoch_ms_raw = ts_match.ms ?? null
 
-  ts = if epoch_s != null {
-    epoch_s * 1000 + epoch_ms
+  # Calculer le timestamp en millisecondes
+  if epoch_s != null {
+    .time = to_int!(epoch_s) * 1000 + to_int!(epoch_ms_raw ?? "0")
   } else {
-    to_unix_timestamp(now(), unit: "milliseconds")
+    .time = to_unix_timestamp!(now(), unit: "milliseconds")
   }
 
   # Parse tous les key=value apres le header
@@ -48,32 +48,43 @@ source = '''
   category_uid = if is_auth { 3 } else { 1 }
 
   # Severity : SYSCALL success=yes → info, success=no → medium
-  success = to_string(pairs.success) ?? ""
-  res = to_string(pairs.res) ?? ""
+  success = pairs.success ?? ""
+  res = pairs.res ?? ""
   ocsf_severity = if success == "no" || res == "failed" { 3 } else { 1 }
 
   .class_uid    = class_uid
   .category_uid = category_uid
   .severity_id  = ocsf_severity
-  .time         = ts
 
   # Process info (SYSCALL/EXECVE)
+  uid_val = pairs.uid ?? null
+  auid_val = pairs.auid ?? null
+  pid_raw = pairs.pid ?? null
+  pid_val = if pid_raw != null { to_int!(pid_raw) } else { null }
+  comm_val = pairs.comm ?? pairs.exe ?? null
+  proctitle_val = pairs.proctitle ?? null
+
   .actor = {
     "user": {
-      "uid":  to_string(pairs.uid) ?? null,
-      "name": to_string(pairs.auid) ?? null
+      "uid":  uid_val,
+      "name": auid_val
     },
     "process": {
-      "pid":  to_int(pairs.pid) ?? null,
-      "name": to_string(pairs.comm) ?? to_string(pairs.exe) ?? null,
-      "cmd_line": to_string(pairs.proctitle) ?? null
+      "pid":  pid_val,
+      "name": comm_val,
+      "cmd_line": proctitle_val
     }
   }
 
+  hostname_val = pairs.hostname ?? null
+  addr_val = pairs.addr ?? null
+
   .src_endpoint = {
-    "hostname": to_string(pairs.hostname) ?? null,
-    "ip":       to_string(pairs.addr) ?? null
+    "hostname": hostname_val,
+    "ip":       addr_val
   }
+
+  serial_val = ts_match.serial ?? null
 
   .metadata = {
     "product": {
@@ -81,14 +92,18 @@ source = '''
       "vendor_name": "Linux"
     },
     "version": "1.0.0",
-    "uid":     to_string(ts_match.serial) ?? null
+    "uid":     serial_val
   }
+
+  syscall_val = pairs.syscall ?? null
+  arch_val = pairs.arch ?? null
+  key_val = pairs.key ?? null
 
   .unmapped = {
     "audit_type": audit_type,
-    "syscall":    to_string(pairs.syscall) ?? null,
-    "arch":       to_string(pairs.arch) ?? null,
-    "key":        to_string(pairs.key) ?? null
+    "syscall":    syscall_val,
+    "arch":       arch_val,
+    "key":        key_val
   }
 
   .raw = del(.message)

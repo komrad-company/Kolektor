@@ -23,10 +23,11 @@ source = '''
   # Parse syslog prefix : "Apr 14 10:23:45 hostname app[pid]: message"
   parts = parse_regex(raw_msg, r'^(?P<timestamp>\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(?P<hostname>\S+)\s+(?P<app>\S+?)(?:\[(?P<pid>\d+)\])?:\s+(?P<msg>.+)$') ?? {}
 
-  hostname = to_string(parts.hostname) ?? "unknown"
-  app = to_string(parts.app) ?? "unknown"
-  pid = to_int(parts.pid) ?? null
-  msg = to_string(parts.msg) ?? raw_msg
+  hostname = parts.hostname ?? "unknown"
+  app = parts.app ?? "unknown"
+  pid_raw = parts.pid ?? null
+  pid = if pid_raw != null { to_int!(pid_raw) } else { null }
+  msg = parts.msg ?? raw_msg
 
   # Determiner le type d'event et extraire les details
   is_ssh_accept = match(msg, r'Accepted\s+(password|publickey)\s+for')
@@ -46,10 +47,11 @@ source = '''
   sudo_match = parse_regex(msg, r'(?P<user>\S+)\s+:\s+TTY=(?P<tty>\S+)\s+;\s+PWD=(?P<pwd>\S+)\s+;\s+USER=(?P<target_user>\S+)\s+;\s+COMMAND=(?P<command>.+)$') ?? {}
 
   # Construire les champs en fonction du type
-  user_name = to_string(ssh_accept.user) ?? to_string(ssh_fail.user) ?? to_string(sudo_match.user) ?? null
-  src_ip = to_string(ssh_accept.ip) ?? to_string(ssh_fail.ip) ?? null
-  src_port = to_int(ssh_accept.port) ?? to_int(ssh_fail.port) ?? null
-  auth_method = to_string(ssh_accept.method) ?? to_string(ssh_fail.method) ?? null
+  user_name = ssh_accept.user ?? ssh_fail.user ?? sudo_match.user ?? null
+  src_ip = ssh_accept.ip ?? ssh_fail.ip ?? null
+  src_port_raw = ssh_accept.port ?? ssh_fail.port ?? null
+  src_port = if src_port_raw != null { to_int!(src_port_raw) } else { null }
+  auth_method = ssh_accept.method ?? ssh_fail.method ?? null
 
   # Severity et status
   is_success = is_ssh_accept || (is_sudo && !match(msg, r'authentication failure'))
@@ -65,7 +67,7 @@ source = '''
   .class_uid    = 3002
   .category_uid = 3
   .severity_id  = ocsf_severity
-  .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  .time         = to_unix_timestamp!(now(), unit: "milliseconds")
   .status       = status
   .status_id    = status_id
   .activity_name = activity
@@ -97,9 +99,12 @@ source = '''
     "version": "1.0.0"
   }
 
+  sudo_cmd = sudo_match.command ?? null
+  sudo_target = sudo_match.target_user ?? null
+
   .unmapped = {
-    "sudo_command":     to_string(sudo_match.command) ?? null,
-    "sudo_target_user": to_string(sudo_match.target_user) ?? null
+    "sudo_command":     sudo_cmd,
+    "sudo_target_user": sudo_target
   }
 
   .raw = del(.message)
