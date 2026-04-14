@@ -27,7 +27,7 @@ source = '''
   app = parts.app
   pid_raw = parts.pid
   pid = if pid_raw != null { to_int!(pid_raw) } else { null }
-  msg = parts.msg
+  msg = string(parts.msg) ?? ""
 
   # Determiner le type d'event et extraire les details
   is_ssh_accept = match(msg, r'Accepted\s+(password|publickey)\s+for')
