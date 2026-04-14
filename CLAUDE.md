@@ -42,7 +42,7 @@ korelator-catalog/
 - `vector validate --no-environment` sur chaque `vector.toml`
 - `vector test` sur chaque source (merge vector.toml + tests/*.toml)
 - Rapport markdown en artifact
-- Image CI : `timberio/vector:0.44-debian`
+- Image CI : `timberio/vector:0.54.0-debian`
 
 ## Pieges connus
 - `vector test` necessite que les tests soient dans le meme fichier ou passes en argument avec le config
