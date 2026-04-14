@@ -27,18 +27,18 @@ source = '''
   # srcip=10.0.0.5 srcport=54321 dstip=8.8.8.8 dstport=443 ...
   kv = parse_key_value(raw_msg, key_value_delimiter: "=", field_delimiter: " ") ?? {}
 
-  fgt_type = kv.type ?? ""
-  fgt_subtype = kv.subtype ?? ""
-  fgt_action = kv.action ?? ""
-  fgt_level = kv.level ?? "notice"
+  fgt_type = kv.type
+  fgt_subtype = kv.subtype
+  fgt_action = kv.action
+  fgt_level = kv.level
 
   # Valider qu'on a bien un log FortiGate
   valid = fgt_type != ""
 
   if valid {
     # Timestamp : date=YYYY-MM-DD time=HH:MM:SS
-    date_str = kv.date ?? ""
-    time_str = kv.time ?? ""
+    date_str = kv.date
+    time_str = kv.time
     ts_str = date_str + "T" + time_str + "Z"
     parsed_ts = parse_timestamp(ts_str, format: "%Y-%m-%dT%H:%M:%SZ") ?? null
     .time = if parsed_ts != null {
@@ -78,11 +78,11 @@ source = '''
     .action       = ocsf_action
     .action_id    = ocsf_action_id
 
-    srcip = kv.srcip ?? null
-    srcport_raw = kv.srcport ?? null
+    srcip = kv.srcip
+    srcport_raw = kv.srcport
     srcport = if srcport_raw != null { to_int!(srcport_raw) } else { null }
-    dstip = kv.dstip ?? null
-    dstport_raw = kv.dstport ?? null
+    dstip = kv.dstip
+    dstport_raw = kv.dstport
     dstport = if dstport_raw != null { to_int!(dstport_raw) } else { null }
 
     .src_endpoint = {
@@ -94,10 +94,10 @@ source = '''
       "port": dstport
     }
 
-    proto_raw = kv.proto ?? null
+    proto_raw = kv.proto
     proto_num = if proto_raw != null { to_int!(proto_raw) } else { null }
-    service_name = kv.service ?? null
-    direction_val = kv.direction ?? null
+    service_name = kv.service
+    direction_val = kv.direction
 
     .connection_info = {
       "protocol_num": proto_num,
@@ -105,10 +105,10 @@ source = '''
       "direction":     direction_val
     }
 
-    rcvdbyte_raw = kv.rcvdbyte ?? null
-    sentbyte_raw = kv.sentbyte ?? null
-    rcvdpkt_raw = kv.rcvdpkt ?? null
-    sentpkt_raw = kv.sentpkt ?? null
+    rcvdbyte_raw = kv.rcvdbyte
+    sentbyte_raw = kv.sentbyte
+    rcvdpkt_raw = kv.rcvdpkt
+    sentpkt_raw = kv.sentpkt
     bytes_in = if rcvdbyte_raw != null { to_int!(rcvdbyte_raw) } else { null }
     bytes_out = if sentbyte_raw != null { to_int!(sentbyte_raw) } else { null }
     packets_in = if rcvdpkt_raw != null { to_int!(rcvdpkt_raw) } else { null }
@@ -121,7 +121,7 @@ source = '''
       "packets_out": packets_out
     }
 
-    logid_val = kv.logid ?? null
+    logid_val = kv.logid
 
     .metadata = {
       "product": {
@@ -132,14 +132,14 @@ source = '''
       "uid":     logid_val
     }
 
-    policyid_val = kv.policyid ?? null
-    devname_val = kv.devname ?? null
-    srcintf_val = kv.srcintf ?? null
-    dstintf_val = kv.dstintf ?? null
-    duration_raw = kv.duration ?? null
+    policyid_val = kv.policyid
+    devname_val = kv.devname
+    srcintf_val = kv.srcintf
+    dstintf_val = kv.dstintf
+    duration_raw = kv.duration
     duration_val = if duration_raw != null { to_int!(duration_raw) } else { null }
-    appcat_val = kv.appcat ?? null
-    app_val = kv.app ?? null
+    appcat_val = kv.appcat
+    app_val = kv.app
 
     .unmapped = {
       "type":     fgt_type,

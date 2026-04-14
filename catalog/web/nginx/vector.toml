@@ -24,25 +24,25 @@ source = '''
   # 10.0.0.1 - user [14/Apr/2024:10:23:45 +0000] "GET /path HTTP/1.1" 200 1234 "https://ref.com" "Mozilla/5.0 ..."
   parsed = parse_regex(raw_msg, r'^(?P<remote_addr>\S+)\s+-\s+(?P<remote_user>\S+)\s+\[(?P<time_local>[^\]]+)\]\s+"(?P<method>\S+)\s+(?P<uri>\S+)\s+(?P<protocol>[^"]+)"\s+(?P<status>\d+)\s+(?P<body_bytes>\d+)\s+"(?P<referer>[^"]*?)"\s+"(?P<user_agent>[^"]*?)"') ?? {}
 
-  remote_addr = parsed.remote_addr ?? ""
+  remote_addr = parsed.remote_addr
   valid = remote_addr != ""
 
   if valid {
-    method = parsed.method ?? ""
-    uri = parsed.uri ?? ""
-    protocol = parsed.protocol ?? ""
-    status_code = to_int!(parsed.status ?? "0")
-    body_bytes = to_int!(parsed.body_bytes ?? "0")
-    user_agent = parsed.user_agent ?? ""
-    referer = parsed.referer ?? ""
-    remote_user = parsed.remote_user ?? "-"
+    method = parsed.method
+    uri = parsed.uri
+    protocol = parsed.protocol
+    status_code = to_int!(parsed.status)
+    body_bytes = to_int!(parsed.body_bytes)
+    user_agent = parsed.user_agent
+    referer = parsed.referer
+    remote_user = parsed.remote_user
 
     # Pre-compute conditional values (VRL forbids if inside object literals)
     referrer_value = if referer != "-" { referer } else { null }
     actor_name = if remote_user != "-" { remote_user } else { null }
 
     # Parse timestamp : 14/Apr/2024:10:23:45 +0000
-    ts_str = parsed.time_local ?? ""
+    ts_str = parsed.time_local
     parsed_ts = parse_timestamp(ts_str, format: "%d/%b/%Y:%H:%M:%S %z") ?? null
     ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp!(now(), unit: "milliseconds") }
 
