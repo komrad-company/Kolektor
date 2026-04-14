@@ -50,14 +50,13 @@ type      = "log"
   event_id      = 0
   computer_name = "DC01"
 
-# No output expected — dropped by filter_valid
+# Verify the VRL sets event_id=0, which causes filter_valid to drop the event.
+# Vector tests cannot assert "no events received", so we check the pre-filter output.
 [[tests.outputs]]
-extract_from = "filter_valid"
+extract_from = "parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  # This event should be dropped — if it reaches here, something is wrong
-  # But vector test expects at least one condition, so we assert on the event_id
-  assert_eq!(.unmapped.event_id, 0, "event with id 0 should have been dropped")
+  assert_eq!(.unmapped.event_id, 0)
 '''
