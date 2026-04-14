@@ -6,7 +6,8 @@ insert_at = "parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = ""
+  message   = ""
+  timestamp = "2024-04-14T11:00:00.000Z"
 
   [tests.inputs.log_fields.winlog]
   event_id      = 4688
@@ -18,9 +19,6 @@ type      = "log"
     NewProcessName    = "C:\\Windows\\System32\\cmd.exe"
     ParentProcessName = "C:\\Windows\\explorer.exe"
     CommandLine       = "cmd.exe /c whoami"
-
-  [tests.inputs.log_fields]
-  timestamp = "2024-04-14T11:00:00.000Z"
 
 [[tests.outputs]]
 extract_from = "parse_and_normalize"
@@ -45,14 +43,12 @@ insert_at = "parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = ""
+  message   = ""
+  timestamp = "2024-04-14T12:00:00.000Z"
 
   [tests.inputs.log_fields.winlog]
   event_id      = 0
   computer_name = "DC01"
-
-  [tests.inputs.log_fields]
-  timestamp = "2024-04-14T12:00:00.000Z"
 
 # No output expected — dropped by filter_valid
 [[tests.outputs]]
