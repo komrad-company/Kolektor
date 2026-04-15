@@ -6,7 +6,10 @@ insert_at = "parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = "Apr 14 10:24:01 web01 sshd[12346]: Failed password for root from 185.220.101.42 port 44820 ssh2"
+  message  = "Failed password for root from 185.220.101.42 port 44820 ssh2"
+  appname  = "sshd"
+  hostname = "web01"
+  procid   = "12346"
 
 [[tests.outputs]]
 extract_from = "parse_and_normalize"
@@ -31,7 +34,10 @@ insert_at = "parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = "Apr 14 10:25:00 web01 sshd[12347]: Failed password for invalid user admin from 192.168.1.100 port 55555 ssh2"
+  message  = "Failed password for invalid user admin from 192.168.1.100 port 55555 ssh2"
+  appname  = "sshd"
+  hostname = "web01"
+  procid   = "12347"
 
 [[tests.outputs]]
 extract_from = "parse_and_normalize"

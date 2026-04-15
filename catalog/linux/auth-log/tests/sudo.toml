@@ -6,7 +6,10 @@ insert_at = "parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = "Apr 14 11:00:00 db01 sudo[5678]:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/apt update"
+  message  = "  deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/apt update"
+  appname  = "sudo"
+  hostname = "db01"
+  procid   = "5678"
 
 [[tests.outputs]]
 extract_from = "parse_and_normalize"

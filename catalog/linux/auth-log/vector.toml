@@ -1,14 +1,16 @@
 # ==============================================================================
 # Linux auth.log — SSH, sudo, PAM authentication events
 # OCSF Class : 3002 (Authentication)
-# Input      : File (/var/log/auth.log)
+# Input      : Syslog TCP (rsyslog forwarde auth,authpriv facility)
 # Tested with: OpenSSH 8.x/9.x, sudo 1.9.x, Ubuntu/Debian
+# rsyslog   : auth,authpriv.* -> omfwd target port LISTEN_PORT protocol TCP
 # ==============================================================================
 
 # --- SOURCE ---
 [sources.input]
-type    = "file"
-include = ["${AUTH_LOG_PATH:-/var/log/auth.log}"]
+type    = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-514}"
+mode    = "tcp"
 
 # --- TRANSFORM : parse + normalisation OCSF ---
 [transforms.parse_and_normalize]
@@ -18,18 +20,16 @@ source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
 
-  raw_msg = string!(.message)
+  # La source syslog Vector parse le header et fournit :
+  # .hostname, .appname, .procid, .timestamp, .message (corps du message uniquement)
+  hostname = string(.hostname) ?? ""
+  app      = string(.appname) ?? ""
+  pid_raw  = .procid
+  pid      = if pid_raw != null { to_int!(pid_raw) } else { null }
+  msg      = string!(.message)
+  raw_msg  = msg
 
-  # Parse syslog prefix : "Apr 14 10:23:45 hostname app[pid]: message"
-  parts = parse_regex(raw_msg, r'^(?P<timestamp>\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(?P<hostname>\S+)\s+(?P<app>\S+?)(?:\[(?P<pid>\d+)\])?:\s+(?P<msg>.+)$') ?? {}
-
-  hostname = parts.hostname
-  app = parts.app
-  pid_raw = parts.pid
-  pid = if pid_raw != null { to_int!(pid_raw) } else { null }
-  msg = string(parts.msg) ?? ""
-
-  # Determiner le type d'event et extraire les details
+  # Determiner le type d'event et extraire les details depuis le corps du message
   is_ssh_accept = match(msg, r'Accepted\s+(password|publickey)\s+for')
   is_ssh_fail = match(msg, r'Failed\s+(password|publickey)\s+for')
   is_ssh_invalid = match(msg, r'Invalid user')
@@ -109,8 +109,14 @@ source = '''
   }
 
   .raw = del(.message)
-  del(.file)
-  del(.host)
+  del(.timestamp)
+  del(.hostname)
+  del(.appname)
+  del(.facility)
+  del(.severity)
+  del(.procid)
+  del(.msgid)
+  del(.version)
   del(.source_type)
 '''
 
