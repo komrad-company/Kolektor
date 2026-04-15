@@ -1,3 +1,4 @@
 ci/results/
 *.tmp
 .env
+.claude/
