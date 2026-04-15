@@ -9,7 +9,7 @@ on:
 env:
   VECTOR_IMAGE: timberio/vector:0.54.0-debian
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  IMAGE_NAME: ghcr.io/komrad-company/kolektor
 
 jobs:
   validate:
