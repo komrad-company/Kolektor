@@ -1,0 +1,31 @@
+{
+  "version": "0.8",
+  "index_id": "ocsf-identity",
+  "doc_mapping": {
+    "mode": "dynamic",
+    "field_mappings": [
+      {"name": "class_uid",      "type": "i64",      "fast": true},
+      {"name": "category_uid",   "type": "i64",      "fast": true},
+      {"name": "severity_id",    "type": "i64",      "fast": true},
+      {"name": "time",           "type": "datetime", "fast": true,
+        "input_formats": ["unix_timestamp_millis"],
+        "output_format": "unix_timestamp_millis"},
+      {"name": "tenant_id",      "type": "text",     "fast": true, "tokenizer": "raw"},
+      {"name": "datasource_id",  "type": "text",     "fast": true, "tokenizer": "raw"},
+      {"name": "raw",            "type": "text",     "stored": true, "indexed": false},
+      {"name": "status",         "type": "text",     "fast": true, "tokenizer": "raw"},
+      {"name": "status_id",      "type": "i64",      "fast": true},
+      {"name": "activity_name",  "type": "text",     "fast": true, "tokenizer": "raw"},
+      {"name": "activity_id",    "type": "i64",      "fast": true},
+      {"name": "auth_protocol",  "type": "text",     "fast": true, "tokenizer": "raw"},
+      {"name": "actor",          "type": "json",     "fast": true},
+      {"name": "src_endpoint",   "type": "json",     "fast": true},
+      {"name": "metadata",       "type": "json"},
+      {"name": "unmapped",       "type": "json"}
+    ],
+    "timestamp_field": "time"
+  },
+  "search_settings": {
+    "default_search_fields": ["tenant_id", "datasource_id", "raw"]
+  }
+}
