@@ -6,7 +6,10 @@ insert_at = "parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = "Apr 14 10:23:45 web01 sshd[12345]: Accepted publickey for deploy from 10.0.0.5 port 54321 ssh2: RSA SHA256:abc123"
+  message  = "Accepted publickey for deploy from 10.0.0.5 port 54321 ssh2: RSA SHA256:abc123"
+  appname  = "sshd"
+  hostname = "web01"
+  procid   = "12345"
 
 [[tests.outputs]]
 extract_from = "parse_and_normalize"

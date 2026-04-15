@@ -1,14 +1,16 @@
 # ==============================================================================
 # Linux auditd — SYSCALL, EXECVE, PROCTITLE, USER_AUTH, USER_LOGIN
 # OCSF Class : 1003 (Process Activity) + 3002 (Authentication)
-# Input      : File (/var/log/audit/audit.log)
+# Input      : Syslog TCP (rsyslog forwarde /var/log/audit/audit.log via imfile)
 # Tested with: auditd 3.0+, Linux 5.x/6.x
+# rsyslog   : imfile /var/log/audit/audit.log -> omfwd target port LISTEN_PORT TCP
 # ==============================================================================
 
 # --- SOURCE ---
 [sources.input]
-type    = "file"
-include = ["${AUDIT_LOG_PATH:-/var/log/audit/audit.log}"]
+type    = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-514}"
+mode    = "tcp"
 
 # --- TRANSFORM : parse + normalisation OCSF ---
 [transforms.parse_and_normalize]
@@ -107,8 +109,14 @@ source = '''
   }
 
   .raw = del(.message)
-  del(.file)
-  del(.host)
+  del(.timestamp)
+  del(.hostname)
+  del(.appname)
+  del(.facility)
+  del(.severity)
+  del(.procid)
+  del(.msgid)
+  del(.version)
   del(.source_type)
 '''
 
