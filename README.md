@@ -1,4 +1,4 @@
-# Korelator Catalog — Vector.dev OCSF Config Catalog
+# Kolektor — Vector.dev OCSF Config Catalog
 
 Catalogue de configurations [Vector.dev](https://vector.dev) pour la normalisation de logs en [OCSF](https://schema.ocsf.io).
 Matiere premiere du SOC UI : chaque config est une source de donnees deployable par tenant.
@@ -7,7 +7,7 @@ Matiere premiere du SOC UI : chaque config est une source de donnees deployable 
 
 ```
 ┌──────────┐     ┌──────────────────────────┐     ┌──────────┐     ┌───────────┐
-│  Sources  │────→│  Vector (catalog config)  │────→│ Quickwit  │────→│ Korelator │
+│  Sources  │────→│  Vector (catalog config)  │────→│ Quickwit  │────→│ Kolektor  │
 │ syslog,   │     │  parse VRL + OCSF norm    │     │ index par │     │ correlation│
 │ JSON, file│     │  1 pod par datasource     │     │ classe    │     │ + alertes  │
 └──────────┘     └──────────────────────────┘     └──────────┘     └───────────┘
@@ -23,7 +23,7 @@ SOC UI → API Rust → commit Git → ArgoCD → Deployment Vector (SOURCE_TYPE
 ## Structure du repo
 
 ```
-korelator-catalog/
+kolektor/
 │
 ├── Dockerfile              # Image Vector + catalog embarque
 ├── entrypoint.sh           # Selectionne la config via $SOURCE_TYPE
@@ -92,7 +92,7 @@ catalog/<category>/<source>/
 
 ```bash
 # Build local
-docker build -t korelator-catalog .
+docker build -t kolektor .
 
 # Run avec une source specifique
 docker run -e SOURCE_TYPE=linux/syslog \
@@ -100,17 +100,17 @@ docker run -e SOURCE_TYPE=linux/syslog \
            -e DATASOURCE_ID=ds-syslog-01 \
            -e QUICKWIT_ENDPOINT=http://quickwit:7280 \
            -p 5140:514 \
-           korelator-catalog
+           kolektor
 
 # Lister les sources disponibles
-docker run korelator-catalog
+docker run kolektor
 ```
 
 L'image est buildee par Kaniko en CI et pushee sur `ghcr.io/komrad-company/kolektor`.
 
 ## Deploiement K8s (ArgoCD)
 
-Chaque datasource = 1 Deployment dans `infrastructure/korelator-collector/` (repo argocd) :
+Chaque datasource = 1 Deployment dans `infrastructure/kolektor-collector/` (repo argocd) :
 
 ```yaml
 env:
