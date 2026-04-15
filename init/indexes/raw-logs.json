@@ -1,0 +1,51 @@
+{
+  "version": "0.8",
+  "index_id": "raw-logs",
+  "doc_mapping": {
+    "mode": "strict",
+    "field_mappings": [
+      {
+        "name": "uid",
+        "type": "text",
+        "fast": true,
+        "tokenizer": "raw"
+      },
+      {
+        "name": "time",
+        "type": "datetime",
+        "fast": true,
+        "fast_precision": "milliseconds",
+        "input_formats": [
+          "unix_timestamp"
+        ],
+        "output_format": "unix_timestamp_millis"
+      },
+      {
+        "name": "tenant_id",
+        "type": "text",
+        "fast": true,
+        "tokenizer": "raw"
+      },
+      {
+        "name": "datasource_id",
+        "type": "text",
+        "fast": true,
+        "tokenizer": "raw"
+      },
+      {
+        "name": "raw",
+        "type": "text",
+        "stored": true,
+        "indexed": true
+      }
+    ],
+    "timestamp_field": "time"
+  },
+  "search_settings": {
+    "default_search_fields": [
+      "tenant_id",
+      "datasource_id",
+      "raw"
+    ]
+  }
+}

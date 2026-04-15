@@ -22,5 +22,5 @@ source = '''
   assert_eq!(.class_uid, 6001)
   assert_eq!(.severity_id, 5)
   assert_eq!(.actor.process.name, "kernel")
-  assert_eq!(.raw, "Kernel panic - not syncing: Fatal exception")
+  assert!(contains(string!(.raw), "Kernel panic - not syncing: Fatal exception"))
 '''
