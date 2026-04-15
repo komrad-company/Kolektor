@@ -108,7 +108,13 @@ source = '''
     "sudo_target_user": sudo_target
   }
 
-  .raw = del(.message)
+  # Ligne brute complète (header syslog + message) + identifiant unique
+  _pid = if pid_raw != null { "[" + to_string!(pid_raw) + "]" } else { "" }
+  _ts  = to_string(.timestamp) ?? ""
+  .raw = _ts + " " + hostname + " " + app + _pid + ": " + raw_msg
+  .uid = uuid_v4()
+
+  del(.message)
   del(.timestamp)
   del(.hostname)
   del(.appname)
@@ -126,7 +132,21 @@ type      = "filter"
 inputs    = ["parse_and_normalize"]
 condition = '.raw != null && .raw != ""'
 
-# --- SINK : Quickwit ---
+# --- TRANSFORM : extraction pour raw-logs ---
+[transforms.raw_only]
+type   = "remap"
+inputs = ["filter_valid"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "raw":           .raw
+  }
+'''
+
+# --- SINK : Quickwit OCSF ---
 [sinks.quickwit]
 type                = "http"
 inputs              = ["filter_valid"]
@@ -137,4 +157,17 @@ batch.max_events    = 1000
 batch.timeout_secs  = 5
 
 [sinks.quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs ---
+[sinks.quickwit_raw]
+type                = "http"
+inputs              = ["raw_only"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit_raw.request]
 headers.Content-Type = "application/x-ndjson"

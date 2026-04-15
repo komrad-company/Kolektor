@@ -8,7 +8,7 @@ set -euo pipefail
 
 QUICKWIT_ENDPOINT="${QUICKWIT_ENDPOINT:-http://quickwit-searcher.quickwit:7280}"
 INDEXES_DIR="$(dirname "$0")/indexes"
-INDEXES="ocsf-network ocsf-endpoint ocsf-identity ocsf-audit"
+INDEXES="ocsf-network ocsf-endpoint ocsf-identity ocsf-audit raw-logs"
 
 echo "Quickwit endpoint : $QUICKWIT_ENDPOINT"
 echo ""
