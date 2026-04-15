@@ -11,7 +11,7 @@ type      = "log"
   hostname  = "db01"
   appname   = "kernel"
   facility  = "kern"
-  severity  = "0"
+  severity  = "emerg"
 
 [[tests.outputs]]
 extract_from = "parse_and_normalize"
