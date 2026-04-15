@@ -4,11 +4,11 @@
   "doc_mapping": {
     "mode": "dynamic",
     "field_mappings": [
-      {"name": "class_uid",     "type": "i64",      "fast": true},
-      {"name": "category_uid",  "type": "i64",      "fast": true},
-      {"name": "severity_id",   "type": "i64",      "fast": true},
-      {"name": "time",          "type": "datetime", "fast": true,
-        "input_formats": ["unix_timestamp_millis"],
+      {"name": "class_uid",     "type": "u64", "coerce": true,      "fast": true},
+      {"name": "category_uid",  "type": "u64", "coerce": true,      "fast": true},
+      {"name": "severity_id",   "type": "u64", "coerce": true,      "fast": true},
+      {"name": "time",          "type": "datetime", "fast": true, "fast_precision": "milliseconds",
+        "input_formats": ["unix_timestamp"],
         "output_format": "unix_timestamp_millis"},
       {"name": "tenant_id",     "type": "text",     "fast": true, "tokenizer": "raw"},
       {"name": "datasource_id", "type": "text",     "fast": true, "tokenizer": "raw"},
