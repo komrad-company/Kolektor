@@ -30,7 +30,7 @@ def main():
     validate_results = parse_junit(RESULTS_DIR / "validate-junit.xml")
     test_results = parse_junit(RESULTS_DIR / "test-junit.xml")
 
-    lines = ["# Korelator Catalog — Rapport CI", ""]
+    lines = ["# Kolektor — Rapport CI", ""]
 
     # Validation
     v_pass = sum(1 for r in validate_results if r["passed"])

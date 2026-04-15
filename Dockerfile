@@ -1,7 +1,7 @@
 FROM timberio/vector:0.54.0-debian
 
 LABEL maintainer="Benoit Caillabet"
-LABEL description="Vector.dev with OCSF catalog — korelator-catalog"
+LABEL description="Vector.dev with OCSF catalog — kolektor"
 
 # Copier tout le catalog
 COPY catalog/ /etc/vector/catalog/

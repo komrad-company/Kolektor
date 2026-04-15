@@ -1,4 +1,4 @@
-# CLAUDE.md — Korelator Catalog
+# CLAUDE.md — Kolektor
 
 ## Projet
 Catalogue de configurations Vector.dev pour la normalisation de logs en OCSF.
@@ -6,7 +6,7 @@ Matiere premiere du SOC UI : chaque config est une source de donnees deployable 
 
 ## Structure
 ```
-korelator-catalog/
+kolektor/
 ├── _schema/            # Template + guide contribution
 ├── _lib/               # Sinks Quickwit reutilisables
 ├── catalog/
