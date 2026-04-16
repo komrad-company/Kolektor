@@ -5,16 +5,12 @@ LABEL description="Vector.dev with OCSF catalog — kolektor"
 
 # Copier tout le catalog
 COPY catalog/ /etc/vector/catalog/
-COPY _lib/ /etc/vector/_lib/
 COPY entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh
 
-# Variables runtime obligatoires
-ENV SOURCE_TYPE=""
-ENV TENANT_ID=""
-ENV DATASOURCE_ID=""
-ENV QUICKWIT_ENDPOINT="http://quickwit-searcher.quickwit:7280"
-ENV LISTEN_PORT=""
+# Variables runtime : entrypoint.sh valide leur presence au demarrage.
+# Pas de default pour QUICKWIT_ENDPOINT : chaque deploiement doit fournir explicitement
+# son URL (http en cluster interne, https en prod) pour eviter un fallback silencieux.
 
 ENTRYPOINT ["/entrypoint.sh"]

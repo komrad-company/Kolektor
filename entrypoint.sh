@@ -19,10 +19,21 @@ if [ ! -f "$CONFIG_FILE" ]; then
   exit 1
 fi
 
+# Valider les variables runtime obligatoires (sinon Vector produit des events avec tenant_id="" qui polluent Quickwit)
+MISSING=()
+[ -z "${TENANT_ID:-}" ]         && MISSING+=("TENANT_ID")
+[ -z "${DATASOURCE_ID:-}" ]     && MISSING+=("DATASOURCE_ID")
+[ -z "${QUICKWIT_ENDPOINT:-}" ] && MISSING+=("QUICKWIT_ENDPOINT")
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+  echo "FATAL: required environment variables missing: ${MISSING[*]}"
+  exit 1
+fi
+
 echo "Starting Vector with source: $SOURCE_TYPE"
-echo "  Config:    $CONFIG_FILE"
-echo "  Tenant:    ${TENANT_ID:-<not set>}"
-echo "  Datasource: ${DATASOURCE_ID:-<not set>}"
-echo "  Quickwit:  ${QUICKWIT_ENDPOINT:-<not set>}"
+echo "  Config:     $CONFIG_FILE"
+echo "  Tenant:     $TENANT_ID"
+echo "  Datasource: $DATASOURCE_ID"
+echo "  Quickwit:   $QUICKWIT_ENDPOINT"
 
 exec vector --config "$CONFIG_FILE" "$@"
