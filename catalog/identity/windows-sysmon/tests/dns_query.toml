@@ -2,7 +2,7 @@
 name = "Sysmon — Event 22 DNS Query"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "sysmon_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -21,7 +21,7 @@ type      = "log"
     QueryResults = "type:  5 c2-server.evil.com;::ffff:93.184.216.34;"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "sysmon_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"
@@ -36,7 +36,7 @@ source = '''
 name = "Sysmon — Event 11 File Created"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "sysmon_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -54,7 +54,7 @@ type      = "log"
     TargetFilename = "C:\\Users\\jdoe\\AppData\\Local\\Temp\\payload.exe"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "sysmon_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

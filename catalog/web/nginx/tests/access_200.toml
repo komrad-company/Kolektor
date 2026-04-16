@@ -2,14 +2,14 @@
 name = "nginx — 200 OK GET request"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "nginx_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
   message = '10.0.0.1 - - [14/Apr/2024:10:23:45 +0000] "GET /api/v1/users HTTP/1.1" 200 1234 "https://app.example.com/dashboard" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"'
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "nginx_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

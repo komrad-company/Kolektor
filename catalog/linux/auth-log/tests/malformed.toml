@@ -2,7 +2,7 @@
 name = "auth-log — malformed (message non auth)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "authlog_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -14,7 +14,7 @@ type      = "log"
 # Le transform ne doit pas panic : regex retournent {}, user/ip restent null.
 # L'event passe filter_valid (raw non vide) mais avec status "Other".
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "authlog_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

@@ -2,7 +2,7 @@
 name = "auth-log — SSH failed password"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "authlog_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -12,7 +12,7 @@ type      = "log"
   procid   = "12346"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "authlog_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"
@@ -30,7 +30,7 @@ source = '''
 name = "auth-log — SSH failed invalid user"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "authlog_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -40,7 +40,7 @@ type      = "log"
   procid   = "12347"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "authlog_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

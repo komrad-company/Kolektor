@@ -6,15 +6,15 @@
 # ==============================================================================
 
 # --- SOURCE ---
-[sources.input]
+[sources.syslog_input]
 type    = "syslog"
-address = "0.0.0.0:${LISTEN_PORT:-514}"
+address = "0.0.0.0:${LISTEN_PORT:-5141}"
 mode    = "tcp"
 
 # --- TRANSFORM : parse + normalisation OCSF ---
-[transforms.parse_and_normalize]
+[transforms.syslog_parse_and_normalize]
 type   = "remap"
-inputs = ["input"]
+inputs = ["syslog_input"]
 source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
@@ -92,15 +92,15 @@ source = '''
 '''
 
 # --- FILTER : drop vides ---
-[transforms.filter_valid]
+[transforms.syslog_filter_valid]
 type      = "filter"
-inputs    = ["parse_and_normalize"]
+inputs    = ["syslog_parse_and_normalize"]
 condition = '.raw != null && .raw != ""'
 
 # --- TRANSFORM : extraction pour raw-logs ---
-[transforms.raw_only]
+[transforms.syslog_raw_only]
 type   = "remap"
-inputs = ["filter_valid"]
+inputs = ["syslog_filter_valid"]
 source = '''
   . = {
     "uid":           .uid,
@@ -113,27 +113,27 @@ source = '''
 '''
 
 # --- SINK : Quickwit OCSF ---
-[sinks.quickwit]
+[sinks.syslog_quickwit]
 type                = "http"
-inputs              = ["filter_valid"]
+inputs              = ["syslog_filter_valid"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-audit/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit.request]
+[sinks.syslog_quickwit.request]
 headers.Content-Type = "application/x-ndjson"
 
 # --- SINK : Quickwit raw-logs ---
-[sinks.quickwit_raw]
+[sinks.syslog_quickwit_raw]
 type                = "http"
-inputs              = ["raw_only"]
+inputs              = ["syslog_raw_only"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit_raw.request]
+[sinks.syslog_quickwit_raw.request]
 headers.Content-Type = "application/x-ndjson"

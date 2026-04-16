@@ -2,7 +2,7 @@
 name = "auth-log — SSH accepted publickey"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "authlog_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -12,7 +12,7 @@ type      = "log"
   procid   = "12345"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "authlog_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

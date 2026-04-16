@@ -2,7 +2,7 @@
 name = "Windows Security — 4625 Failed Logon"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "winevtx_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -25,7 +25,7 @@ type      = "log"
     SubStatus         = "0xC000006A"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "winevtx_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

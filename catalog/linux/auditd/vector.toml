@@ -7,15 +7,15 @@
 # ==============================================================================
 
 # --- SOURCE ---
-[sources.input]
+[sources.auditd_input]
 type    = "syslog"
-address = "0.0.0.0:${LISTEN_PORT:-514}"
+address = "0.0.0.0:${LISTEN_PORT:-5143}"
 mode    = "tcp"
 
 # --- TRANSFORM : parse + normalisation OCSF ---
-[transforms.parse_and_normalize]
+[transforms.auditd_parse_and_normalize]
 type   = "remap"
-inputs = ["input"]
+inputs = ["auditd_input"]
 source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
@@ -129,22 +129,22 @@ source = '''
 '''
 
 # --- FILTER : drop vides ---
-[transforms.filter_valid]
+[transforms.auditd_filter_valid]
 type      = "filter"
-inputs    = ["parse_and_normalize"]
+inputs    = ["auditd_parse_and_normalize"]
 condition = '.raw != null && .raw != ""'
 
 # --- ROUTE : dispatch par class_uid (3002 USER_AUTH → identity, 1003 SYSCALL → endpoint) ---
-[transforms.route_by_class]
+[transforms.auditd_route_by_class]
 type   = "route"
-inputs = ["filter_valid"]
+inputs = ["auditd_filter_valid"]
 route.identity = '.class_uid == 3001 || .class_uid == 3002'
 route.endpoint = '.class_uid == 1001 || .class_uid == 1003'
 
 # --- TRANSFORM : extraction pour raw-logs ---
-[transforms.raw_only]
+[transforms.auditd_raw_only]
 type   = "remap"
-inputs = ["filter_valid"]
+inputs = ["auditd_filter_valid"]
 source = '''
   . = {
     "uid":           .uid,
@@ -157,40 +157,40 @@ source = '''
 '''
 
 # --- SINK : Quickwit ocsf-endpoint (SYSCALL/EXECVE) ---
-[sinks.quickwit_endpoint]
+[sinks.auditd_quickwit_endpoint]
 type                = "http"
-inputs              = ["route_by_class.endpoint"]
+inputs              = ["auditd_route_by_class.endpoint"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit_endpoint.request]
+[sinks.auditd_quickwit_endpoint.request]
 headers.Content-Type = "application/x-ndjson"
 
 # --- SINK : Quickwit ocsf-identity (USER_AUTH/USER_LOGIN/CRED_ACQ/USER_ACCT) ---
-[sinks.quickwit_identity]
+[sinks.auditd_quickwit_identity]
 type                = "http"
-inputs              = ["route_by_class.identity"]
+inputs              = ["auditd_route_by_class.identity"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-identity/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit_identity.request]
+[sinks.auditd_quickwit_identity.request]
 headers.Content-Type = "application/x-ndjson"
 
 # --- SINK : Quickwit raw-logs ---
-[sinks.quickwit_raw]
+[sinks.auditd_quickwit_raw]
 type                = "http"
-inputs              = ["raw_only"]
+inputs              = ["auditd_raw_only"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit_raw.request]
+[sinks.auditd_quickwit_raw.request]
 headers.Content-Type = "application/x-ndjson"

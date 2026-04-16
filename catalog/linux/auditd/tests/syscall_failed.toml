@@ -2,14 +2,14 @@
 name = "auditd — SYSCALL failed (permission denied)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "auditd_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
   message = 'type=SYSCALL msg=audit(1713091600.789:1011): arch=c000003e syscall=2 success=no exit=-13 a0=7f2c3a4b1000 a1=0 a2=0 a3=0 items=1 ppid=1000 pid=2000 auid=1001 uid=1001 gid=1001 euid=1001 suid=1001 fsuid=1001 egid=1001 sgid=1001 fsgid=1001 tty=pts1 ses=5 comm="cat" exe="/usr/bin/cat" key="sensitive_files"'
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "auditd_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"
@@ -25,14 +25,14 @@ source = '''
 name = "auditd — malformed line (no type)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "auditd_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
   message = 'this is not a valid audit line at all'
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "auditd_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

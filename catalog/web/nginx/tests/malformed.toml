@@ -2,7 +2,7 @@
 name = "nginx — malformed line (not combined format)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "nginx_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -10,7 +10,7 @@ type      = "log"
 
 # class_uid 0 → dropped by filter_valid
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "nginx_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

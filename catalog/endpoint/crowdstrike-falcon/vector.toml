@@ -6,15 +6,15 @@
 # ==============================================================================
 
 # --- SOURCE ---
-[sources.input]
+[sources.crowdstrike_input]
 type    = "syslog"
 address = "0.0.0.0:${LISTEN_PORT:-1514}"
 mode    = "tcp"
 
 # --- TRANSFORM : parse + normalisation OCSF ---
-[transforms.parse_and_normalize]
+[transforms.crowdstrike_parse_and_normalize]
 type   = "remap"
-inputs = ["input"]
+inputs = ["crowdstrike_input"]
 source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
@@ -137,42 +137,42 @@ source = '''
 '''
 
 # --- FILTER ---
-[transforms.filter_valid]
+[transforms.crowdstrike_filter_valid]
 type      = "filter"
-inputs    = ["parse_and_normalize"]
+inputs    = ["crowdstrike_parse_and_normalize"]
 condition = '.class_uid != 0'
 
 # --- ROUTE : dispatch par class_uid ---
 # 1003 ProcessRollup2 + 2001 DetectionSummary → ocsf-endpoint
 # 4001 NetworkDetection/NetworkContainment → ocsf-network
-[transforms.route_by_class]
+[transforms.crowdstrike_route_by_class]
 type   = "route"
-inputs = ["filter_valid"]
+inputs = ["crowdstrike_filter_valid"]
 route.endpoint = '.class_uid == 1001 || .class_uid == 1003 || .class_uid == 2001'
 route.network  = '.class_uid == 4001'
 
 # --- SINK : Quickwit ocsf-endpoint ---
-[sinks.quickwit_endpoint]
+[sinks.crowdstrike_quickwit_endpoint]
 type                = "http"
-inputs              = ["route_by_class.endpoint"]
+inputs              = ["crowdstrike_route_by_class.endpoint"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit_endpoint.request]
+[sinks.crowdstrike_quickwit_endpoint.request]
 headers.Content-Type = "application/x-ndjson"
 
 # --- SINK : Quickwit ocsf-network ---
-[sinks.quickwit_network]
+[sinks.crowdstrike_quickwit_network]
 type                = "http"
-inputs              = ["route_by_class.network"]
+inputs              = ["crowdstrike_route_by_class.network"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit_network.request]
+[sinks.crowdstrike_quickwit_network.request]
 headers.Content-Type = "application/x-ndjson"

@@ -2,7 +2,7 @@
 name = "FortiGate — malformed (not key=value)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "fortigate_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -10,7 +10,7 @@ type      = "log"
 
 # class_uid should be 0 (dropped by filter_valid)
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "fortigate_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

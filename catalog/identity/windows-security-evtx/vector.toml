@@ -7,15 +7,15 @@
 # ==============================================================================
 
 # --- SOURCE ---
-[sources.input]
+[sources.winevtx_input]
 type    = "http_server"
 address = "0.0.0.0:${LISTEN_PORT:-8514}"
 encoding = "json"
 
 # --- TRANSFORM : parse + normalisation OCSF ---
-[transforms.parse_and_normalize]
+[transforms.winevtx_parse_and_normalize]
 type   = "remap"
-inputs = ["input"]
+inputs = ["winevtx_input"]
 source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
@@ -122,40 +122,40 @@ source = '''
 '''
 
 # --- FILTER : drop unknown events ---
-[transforms.filter_valid]
+[transforms.winevtx_filter_valid]
 type      = "filter"
-inputs    = ["parse_and_normalize"]
+inputs    = ["winevtx_parse_and_normalize"]
 condition = '.unmapped.event_id != 0'
 
 # --- ROUTE : dispatch par class_uid vers l'index OCSF correspondant ---
-[transforms.route_by_class]
+[transforms.winevtx_route_by_class]
 type   = "route"
-inputs = ["filter_valid"]
+inputs = ["winevtx_filter_valid"]
 route.identity = '.class_uid == 3001 || .class_uid == 3002'
 route.endpoint = '.class_uid == 1001 || .class_uid == 1003'
 
 # --- SINK : Quickwit ocsf-identity (auth + account) ---
-[sinks.quickwit_identity]
+[sinks.winevtx_quickwit_identity]
 type                = "http"
-inputs              = ["route_by_class.identity"]
+inputs              = ["winevtx_route_by_class.identity"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-identity/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit_identity.request]
+[sinks.winevtx_quickwit_identity.request]
 headers.Content-Type = "application/x-ndjson"
 
 # --- SINK : Quickwit ocsf-endpoint (process: 4688/4698) ---
-[sinks.quickwit_endpoint]
+[sinks.winevtx_quickwit_endpoint]
 type                = "http"
-inputs              = ["route_by_class.endpoint"]
+inputs              = ["winevtx_route_by_class.endpoint"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit_endpoint.request]
+[sinks.winevtx_quickwit_endpoint.request]
 headers.Content-Type = "application/x-ndjson"

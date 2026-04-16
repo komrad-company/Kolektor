@@ -2,7 +2,7 @@
 name = "Syslog — critical severity (emerg=0)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "syslog_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -14,7 +14,7 @@ type      = "log"
   severity  = "emerg"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "syslog_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

@@ -2,7 +2,7 @@
 name = "CloudTrail — empty eventName (invalid)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "cloudtrail_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -10,7 +10,7 @@ type      = "log"
   eventTime    = "2024-04-14T12:00:00Z"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "cloudtrail_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

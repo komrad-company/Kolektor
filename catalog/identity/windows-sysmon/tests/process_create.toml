@@ -2,7 +2,7 @@
 name = "Sysmon — Event 1 Process Create (powershell)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "sysmon_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -25,7 +25,7 @@ type      = "log"
     ProcessGuid         = "{12345678-abcd-ef01-2345-6789abcdef01}"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "sysmon_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

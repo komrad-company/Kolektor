@@ -6,15 +6,15 @@
 # ==============================================================================
 
 # --- SOURCE ---
-[sources.input]
+[sources.opnsense_input]
 type    = "syslog"
-address = "0.0.0.0:${LISTEN_PORT:-514}"
+address = "0.0.0.0:${LISTEN_PORT:-5140}"
 mode    = "tcp"
 
 # --- TRANSFORM : parse + normalisation OCSF ---
-[transforms.parse_and_normalize]
+[transforms.opnsense_parse_and_normalize]
 type   = "remap"
-inputs = ["input"]
+inputs = ["opnsense_input"]
 source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
@@ -122,15 +122,15 @@ source = '''
 '''
 
 # --- FILTER : drop malformed ---
-[transforms.filter_valid]
+[transforms.opnsense_filter_valid]
 type      = "filter"
-inputs    = ["parse_and_normalize"]
+inputs    = ["opnsense_parse_and_normalize"]
 condition = '.class_uid == 4001'
 
 # --- TRANSFORM : extraction pour raw-logs ---
-[transforms.raw_only]
+[transforms.opnsense_raw_only]
 type   = "remap"
-inputs = ["filter_valid"]
+inputs = ["opnsense_filter_valid"]
 source = '''
   . = {
     "uid":           .uid,
@@ -143,27 +143,27 @@ source = '''
 '''
 
 # --- SINK : Quickwit OCSF ---
-[sinks.quickwit]
+[sinks.opnsense_quickwit]
 type                = "http"
-inputs              = ["filter_valid"]
+inputs              = ["opnsense_filter_valid"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit.request]
+[sinks.opnsense_quickwit.request]
 headers.Content-Type = "application/x-ndjson"
 
 # --- SINK : Quickwit raw-logs ---
-[sinks.quickwit_raw]
+[sinks.opnsense_quickwit_raw]
 type                = "http"
-inputs              = ["raw_only"]
+inputs              = ["opnsense_raw_only"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit_raw.request]
+[sinks.opnsense_quickwit_raw.request]
 headers.Content-Type = "application/x-ndjson"
