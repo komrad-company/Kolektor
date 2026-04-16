@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Valide chaque vector.toml du catalog avec vector validate
+# Valide chaque vector.toml du catalog avec vector validate.
+# Vector 0.54 n'a pas de flag qui ignore les ${VAR} : on injecte des dummy runtime vars
+# pour que l'expansion reussisse. Ce sont de faux endpoints, pas utilises a la validation.
 set -euo pipefail
 
-# Dummy env vars pour que Vector ne plante pas sur les ${VAR} dans les configs
 export TENANT_ID="ci-validate"
 export DATASOURCE_ID="ci-validate"
 export QUICKWIT_ENDPOINT="http://localhost:7280"
