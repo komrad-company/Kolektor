@@ -27,14 +27,11 @@ kolektor/
 │
 ├── Dockerfile              # Image Vector + catalog embarque
 ├── entrypoint.sh           # Selectionne la config via $SOURCE_TYPE
-├── .gitlab-ci.yml          # Pipeline : validate → test → coverage → build
+├── .github/workflows/ci.yml # Pipeline : validate → test → coverage → build → push ghcr.io
 │
 ├── _schema/
 │   ├── template.toml       # Template vide commente (copier pour nouvelle source)
 │   └── README.md           # Guide de contribution pas-a-pas
-│
-├── _lib/
-│   └── sinks.toml          # Sinks Quickwit reutilisables par index OCSF
 │
 ├── catalog/                # Toutes les configs Vector par categorie
 │   ├── network/            # Firewalls, NDR → OCSF 4001 Network Activity
@@ -106,7 +103,7 @@ docker run -e SOURCE_TYPE=linux/syslog \
 docker run kolektor
 ```
 
-L'image est buildee par Kaniko en CI et pushee sur `gitlab.bibihome.lan:5050/root/kolektor`.
+L'image est buildee par GitHub Actions (docker/build-push-action) et pushee sur `ghcr.io/komrad-company/kolektor` a chaque merge sur `main` (tags `latest` + `<sha>`).
 
 ## Deploiement K8s (ArgoCD)
 
@@ -142,8 +139,8 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 | validate | `vector validate` sur chaque vector.toml      | vector:0.54.0-debian      |
 | test     | `vector test` (config + tests merges)         | vector:0.54.0-debian      |
 | coverage | Verifie >= 3 tests par source                 | vector:0.54.0-debian      |
-| report   | Genere rapport markdown en artifact           | python:3.12-slim          |
-| build    | Kaniko → registry GitLab (main uniquement)    | kaniko:v1.23.2-debug      |
+| report   | Genere rapport markdown en artifact           | ubuntu-latest + python 3.12 |
+| build    | docker/build-push-action → ghcr.io (main)     | ubuntu-latest             |
 
 ## Contribuer
 
