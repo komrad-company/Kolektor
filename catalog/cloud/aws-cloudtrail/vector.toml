@@ -24,31 +24,32 @@ source = '''
   # sourceIPAddress, userAgent, userIdentity.{type, arn, accountId, userName},
   # requestParameters, responseElements, errorCode, errorMessage
 
-  event_name = to_string!(.eventName)
-  event_source = to_string!(.eventSource)
+  # to_string() sans `!` : retourne null sur champ absent au lieu de panic (events CloudTrail incomplets)
+  event_name = to_string(.eventName) ?? ""
+  event_source = to_string(.eventSource) ?? ""
   valid = event_name != ""
 
   if valid {
     # Timestamp : ISO 8601
-    ts_str = to_string!(.eventTime)
+    ts_str = to_string(.eventTime) ?? ""
     parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
     ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp!(now(), unit: "milliseconds") }
 
-    # Error = failure (use exists() — to_string(null) returns "" which is not null)
-    error_code = if exists(.errorCode) { to_string!(.errorCode) } else { null }
-    error_msg = if exists(.errorMessage) { to_string!(.errorMessage) } else { null }
+    # Error = failure (exists() obligatoire car to_string(null) == "" en VRL)
+    error_code = if exists(.errorCode) { to_string(.errorCode) ?? null } else { null }
+    error_msg  = if exists(.errorMessage) { to_string(.errorMessage) ?? null } else { null }
     is_error = error_code != null
 
     ocsf_severity = if is_error { 3 } else { 1 }
     status = if is_error { "Failure" } else { "Success" }
     status_id = if is_error { 2 } else { 1 }
 
-    # User identity
+    # User identity (peut manquer pour AWSService / AssumedRole partiel)
     user_identity = object(.userIdentity) ?? {}
-    user_type = to_string!(user_identity.type)
-    user_arn = to_string!(user_identity.arn)
-    user_name = user_identity.userName
-    account_id = to_string!(user_identity.accountId)
+    user_type = to_string(user_identity.type) ?? null
+    user_arn = to_string(user_identity.arn) ?? null
+    user_name = to_string(user_identity.userName) ?? null
+    account_id = to_string(user_identity.accountId) ?? null
 
     # Service name from eventSource (e.g. "ec2.amazonaws.com" → "ec2")
     service_name = replace(event_source, r'\.amazonaws\.com$', "")
@@ -66,7 +67,7 @@ source = '''
         "name": service_name
       },
       "request": {
-        "uid": to_string!(.requestID)
+        "uid": to_string(.requestID) ?? null
       },
       "response": {
         "error":         error_code,
@@ -84,16 +85,16 @@ source = '''
     }
 
     .src_endpoint = {
-      "ip": to_string!(.sourceIPAddress)
+      "ip": to_string(.sourceIPAddress) ?? null
     }
 
     .http_request = {
-      "user_agent": to_string!(.userAgent)
+      "user_agent": to_string(.userAgent) ?? null
     }
 
     .cloud = {
       "provider": "AWS",
-      "region":   to_string!(.awsRegion),
+      "region":   to_string(.awsRegion) ?? null,
       "account_uid": account_id
     }
 
@@ -102,16 +103,16 @@ source = '''
         "name":        "CloudTrail",
         "vendor_name": "AWS"
       },
-      "version": to_string!(.eventVersion),
-      "uid":     to_string!(.eventID)
+      "version": to_string(.eventVersion) ?? null,
+      "uid":     to_string(.eventID) ?? null
     }
 
     .unmapped = {
-      "event_type":          to_string!(.eventType),
-      "event_category":      to_string!(.eventCategory),
+      "event_type":          to_string(.eventType) ?? null,
+      "event_category":      to_string(.eventCategory) ?? null,
       "management_event":    .managementEvent,
       "read_only":           .readOnly,
-      "recipient_account_id": to_string!(.recipientAccountId)
+      "recipient_account_id": to_string(.recipientAccountId) ?? null
     }
   } else {
     .class_uid    = 0
