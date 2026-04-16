@@ -36,16 +36,10 @@ source = '''
   valid = is_string(fgt_type) && fgt_type != ""
 
   if valid {
-    # Timestamp : date=YYYY-MM-DD time=HH:MM:SS
-    date_str = string(kv.date) ?? ""
-    time_str = string(kv.time) ?? ""
-    ts_str = date_str + "T" + time_str + "Z"
-    parsed_ts = parse_timestamp(ts_str, format: "%Y-%m-%dT%H:%M:%SZ") ?? null
-    .time = if parsed_ts != null {
-      to_unix_timestamp!(parsed_ts, unit: "milliseconds")
-    } else {
-      to_unix_timestamp!(now(), unit: "milliseconds")
-    }
+    # Timestamp : priorite au header syslog (timezone fiable du daemon).
+    # Le payload FortiGate "date=... time=..." n'embarque pas de TZ — le device
+    # envoie en heure locale et supposer UTC decale l'horloge.
+    .time = to_unix_timestamp(.timestamp, unit: "milliseconds") ?? to_unix_timestamp(now(), unit: "milliseconds")
 
     # Action OCSF
     ocsf_action = if fgt_action == "accept" || fgt_action == "allow" || fgt_action == "passthrough" {

@@ -46,8 +46,9 @@ source = '''
   # sudo: "user : TTY=pts/0 ; PWD=/home/user ; USER=root ; COMMAND=/usr/bin/apt update"
   sudo_match = parse_regex(msg, r'(?P<user>\S+)\s+:\s+TTY=(?P<tty>\S+)\s+;\s+PWD=(?P<pwd>\S+)\s+;\s+USER=(?P<target_user>\S+)\s+;\s+COMMAND=(?P<command>.+)$') ?? {}
 
-  # Construire les champs en fonction du type (ssh_fail/sudo_match si ssh_accept vide)
-  # Note: ?? ne fait pas de null-coalescing en VRL — utiliser if != null
+  # Construire les champs en fonction du type (ssh_fail/sudo_match si ssh_accept vide).
+  # En VRL, `??` fallback uniquement sur *erreur* d'expression fallible, pas sur `null`
+  # (une valeur null est "infaillible") — ici les captures regex retournent null => cascade explicite.
   user_name = if ssh_accept.user != null { ssh_accept.user } else if ssh_fail.user != null { ssh_fail.user } else if sudo_match.user != null { sudo_match.user } else { null }
   src_ip = if ssh_accept.ip != null { ssh_accept.ip } else if ssh_fail.ip != null { ssh_fail.ip } else { null }
   src_port_raw = if ssh_accept.port != null { ssh_accept.port } else if ssh_fail.port != null { ssh_fail.port } else { null }
@@ -68,7 +69,7 @@ source = '''
   .class_uid    = 3002
   .category_uid = 3
   .severity_id  = ocsf_severity
-  .time         = to_unix_timestamp!(now(), unit: "milliseconds")
+  .time         = to_unix_timestamp(.timestamp, unit: "milliseconds") ?? to_unix_timestamp(now(), unit: "milliseconds")
   .status       = status
   .status_id    = status_id
   .activity_name = activity

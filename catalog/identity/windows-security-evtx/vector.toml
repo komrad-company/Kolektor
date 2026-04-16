@@ -126,15 +126,35 @@ type      = "filter"
 inputs    = ["parse_and_normalize"]
 condition = '.unmapped.event_id != 0'
 
-# --- SINK : Quickwit ---
-[sinks.quickwit]
+# --- ROUTE : dispatch par class_uid vers l'index OCSF correspondant ---
+[transforms.route_by_class]
+type   = "route"
+inputs = ["filter_valid"]
+route.identity = '.class_uid == 3001 || .class_uid == 3002'
+route.endpoint = '.class_uid == 1001 || .class_uid == 1003'
+
+# --- SINK : Quickwit ocsf-identity (auth + account) ---
+[sinks.quickwit_identity]
 type                = "http"
-inputs              = ["filter_valid"]
+inputs              = ["route_by_class.identity"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-identity/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit.request]
+[sinks.quickwit_identity.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit ocsf-endpoint (process: 4688/4698) ---
+[sinks.quickwit_endpoint]
+type                = "http"
+inputs              = ["route_by_class.endpoint"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit_endpoint.request]
 headers.Content-Type = "application/x-ndjson"

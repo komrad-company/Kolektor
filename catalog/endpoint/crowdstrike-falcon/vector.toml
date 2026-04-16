@@ -41,8 +41,7 @@ source = '''
     class_uid = if is_process { 1003 } else if is_network { 4001 } else { 2001 }
     category_uid = if is_network { 4 } else if is_process { 1 } else { 2 }
 
-    # Severity : CrowdStrike severity 1-5 maps to OCSF 1-5
-    cs_severity = to_int(event.SeverityName) ?? to_int(meta.severity) ?? null
+    # Severity : CrowdStrike SeverityName → OCSF severity_id
     cs_severity_name = to_string(event.SeverityName) ?? ""
     ocsf_severity = if cs_severity_name == "Critical" { 5 } else if cs_severity_name == "High" { 4 } else if cs_severity_name == "Medium" { 3 } else if cs_severity_name == "Low" { 2 } else { 1 }
 
@@ -142,15 +141,37 @@ type      = "filter"
 inputs    = ["parse_and_normalize"]
 condition = '.class_uid != 0'
 
-# --- SINK : Quickwit ---
-[sinks.quickwit]
+# --- ROUTE : dispatch par class_uid ---
+# 1003 ProcessRollup2 + 2001 DetectionSummary → ocsf-endpoint
+# 4001 NetworkDetection/NetworkContainment → ocsf-network
+[transforms.route_by_class]
+type   = "route"
+inputs = ["filter_valid"]
+route.endpoint = '.class_uid == 1001 || .class_uid == 1003 || .class_uid == 2001'
+route.network  = '.class_uid == 4001'
+
+# --- SINK : Quickwit ocsf-endpoint ---
+[sinks.quickwit_endpoint]
 type                = "http"
-inputs              = ["filter_valid"]
+inputs              = ["route_by_class.endpoint"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit.request]
+[sinks.quickwit_endpoint.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit ocsf-network ---
+[sinks.quickwit_network]
+type                = "http"
+inputs              = ["route_by_class.network"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.quickwit_network.request]
 headers.Content-Type = "application/x-ndjson"
