@@ -1,0 +1,31 @@
+[[tests]]
+name = "OPNsense filterlog — IPv6 TCP pass"
+
+[[tests.inputs]]
+insert_at = "opnsense_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = "81,,,,igc0,match,pass,out,6,0x0,0x00000,64,TCP,6,60,2a01:cb00:597:2a00:aab8:e0ff:fe0d:f43e,2606:4700::6810:89c6,54321,443"
+  timestamp = "2026-04-16T10:00:00Z"
+  hostname  = "fw1"
+  appname   = "filterlog"
+
+[[tests.outputs]]
+extract_from = "opnsense_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4001)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.action, "Allow")
+  assert_eq!(.action_id, 1)
+  assert_eq!(.src_endpoint.ip, "2a01:cb00:597:2a00:aab8:e0ff:fe0d:f43e")
+  assert_eq!(.dst_endpoint.ip, "2606:4700::6810:89c6")
+  assert_eq!(.src_endpoint.port, 54321)
+  assert_eq!(.dst_endpoint.port, 443)
+  assert_eq!(.connection_info.protocol_num, 6)
+  assert_eq!(.connection_info.protocol_name, "TCP")
+  assert_eq!(.unmapped.ip_version, "6")
+'''

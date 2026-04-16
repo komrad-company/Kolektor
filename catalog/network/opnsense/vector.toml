@@ -22,38 +22,50 @@ source = '''
 
   raw_msg = string!(.message)
 
-  # filterlog CSV format (OPNsense) :
-  # rulenr,subrulenr,anchorname,label,interface,reason,action,direction,ip_version,...
+  # filterlog CSV format (OPNsense / pfSense) — le layout differe par famille IP :
+  # 0=rulenr, 1=subrulenr, 2=anchorname, 3=label, 4=interface, 5=reason, 6=action,
+  # 7=direction, 8=ip_version
   # IPv4 (ip_version=4) :
-  #   ...,tos,ecn,ttl,id,offset,flags,proto_id,proto,length,src,dst,[sport,dport for TCP/UDP]
-  # Champs positions :
-  # 0=rulenr, 1=subrulenr, 2=anchorname, 3=label, 4=interface, 5=reason, 6=action, 7=direction
-  # 8=ip_version
-  # IPv4: 9=tos, 10=ecn, 11=ttl, 12=id, 13=offset, 14=flags, 15=proto_id, 16=proto, 17=length
-  #        18=src_ip, 19=dst_ip
-  # TCP/UDP: 20=src_port, 21=dst_port
+  #   9=tos, 10=ecn, 11=ttl, 12=id, 13=offset, 14=flags,
+  #   15=proto_id, 16=proto, 17=length, 18=src_ip, 19=dst_ip
+  #   TCP/UDP: 20=src_port, 21=dst_port
+  # IPv6 (ip_version=6) :
+  #   9=class, 10=flow-label, 11=hop_limit, 12=proto, 13=proto_id, 14=length,
+  #   15=src_ip, 16=dst_ip
+  #   TCP/UDP: 17=src_port, 18=dst_port
 
   fields = split(raw_msg, ",")
   field_count = length(fields)
 
-  # Besoin d'au moins 20 champs pour un log filterlog valide
-  valid = field_count >= 20
+  # Besoin d'au moins 17 champs (cas IPv6 ICMPv6 sans port : 17 suffisent)
+  valid = field_count >= 17
 
   if valid {
     action_raw = fields[6]
     direction = fields[7]
     ip_version = fields[8]
-    proto = fields[16]
-    src_ip = fields[18]
-    dst_ip = fields[19]
-
-    src_port_str = if field_count > 20 { fields[20] } else { "" }
-    dst_port_str = if field_count > 21 { fields[21] } else { "" }
-    src_port = if src_port_str != "" { to_int!(src_port_str) } else { null }
-    dst_port = if dst_port_str != "" { to_int!(dst_port_str) } else { null }
-    proto_num_raw = fields[15]
-    proto_num = if proto_num_raw != null { to_int!(proto_num_raw) } else { null }
     interface = fields[4]
+
+    is_v6 = ip_version == "6"
+    # VRL : array indexing n'accepte que des literals ; on branche donc sur is_v6.
+    proto_num_raw = if is_v6 { fields[13] } else { fields[15] }
+    proto = if is_v6 { fields[12] } else { fields[16] }
+    src_ip = if is_v6 { fields[15] } else { fields[18] }
+    dst_ip = if is_v6 { fields[16] } else { fields[19] }
+    src_port_str = if is_v6 {
+      if field_count > 17 { fields[17] } else { "" }
+    } else {
+      if field_count > 20 { fields[20] } else { "" }
+    }
+    dst_port_str = if is_v6 {
+      if field_count > 18 { fields[18] } else { "" }
+    } else {
+      if field_count > 21 { fields[21] } else { "" }
+    }
+
+    src_port = if src_port_str != "" { to_int(src_port_str) ?? null } else { null }
+    dst_port = if dst_port_str != "" { to_int(dst_port_str) ?? null } else { null }
+    proto_num = if proto_num_raw != null { to_int(proto_num_raw) ?? null } else { null }
 
     ocsf_action = if action_raw == "pass" { "Allow" } else { "Deny" }
     ocsf_action_id = if action_raw == "pass" { 1 } else { 2 }
