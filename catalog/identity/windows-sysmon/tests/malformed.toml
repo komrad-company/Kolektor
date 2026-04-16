@@ -1,0 +1,20 @@
+[[tests]]
+name = "Sysmon — malformed (winlog absent)"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = "pas du Winlogbeat"
+  timestamp = "2024-04-14T10:23:45.000Z"
+
+# Sans .winlog.event_id, .unmapped.event_id == 0 → filter_valid drop
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.unmapped.event_id, 0)
+'''

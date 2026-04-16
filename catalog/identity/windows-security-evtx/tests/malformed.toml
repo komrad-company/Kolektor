@@ -1,0 +1,26 @@
+[[tests]]
+name = "Windows Security — malformed (event_id manquant)"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = ""
+  timestamp = "2024-04-14T10:23:45.000Z"
+
+  [tests.inputs.log_fields.winlog]
+  computer_name = "DC01.corp.local"
+
+    [tests.inputs.log_fields.winlog.event_data]
+    TargetUserName = "jdoe"
+
+# Sans event_id, le filter_valid drop l'event (.unmapped.event_id == 0)
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.unmapped.event_id, 0)
+'''

@@ -1,0 +1,28 @@
+[[tests]]
+name = "syslog — malformed (severity string inconnue)"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message  = "some syslog payload"
+  hostname = "host01"
+  appname  = "unknown"
+  severity = "not-a-valid-level"
+  facility = "daemon"
+
+# Severity inconnue → default info (sev=6) → ocsf_severity=1.
+# Le transform ne doit pas panic.
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6001)
+  assert_eq!(.category_uid, 6)
+  assert_eq!(.severity_id, 1)
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

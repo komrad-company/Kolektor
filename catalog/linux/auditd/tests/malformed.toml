@@ -1,0 +1,26 @@
+[[tests]]
+name = "auditd — malformed (pas de header type=...)"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message  = "ligne non auditd sans type= ni msg=audit()"
+  hostname = "host01"
+  appname  = "auditd"
+
+# Le transform ne doit pas panic : audit_type reste null, aucun pairs extrait.
+# L'event passe le filter_valid (.raw non vide) mais avec des champs OCSF dégradés.
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 1003)
+  assert_eq!(.unmapped.audit_type, null)
+  assert_eq!(.unmapped.syscall, null)
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

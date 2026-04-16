@@ -1,0 +1,29 @@
+[[tests]]
+name = "auth-log — malformed (message non auth)"
+
+[[tests.inputs]]
+insert_at = "parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message  = "random message without ssh auth pattern"
+  hostname = "host01"
+  appname  = "sshd"
+  procid   = "999"
+
+# Le transform ne doit pas panic : regex retournent {}, user/ip restent null.
+# L'event passe filter_valid (raw non vide) mais avec status "Other".
+[[tests.outputs]]
+extract_from = "parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3002)
+  assert_eq!(.status, "Other")
+  assert_eq!(.status_id, 0)
+  assert_eq!(.actor.user.name, null)
+  assert_eq!(.src_endpoint.ip, null)
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''
