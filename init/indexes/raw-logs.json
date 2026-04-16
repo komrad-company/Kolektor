@@ -2,7 +2,7 @@
   "version": "0.8",
   "index_id": "raw-logs",
   "doc_mapping": {
-    "mode": "strict",
+    "mode": "dynamic",
     "field_mappings": [
       {
         "name": "uid",
@@ -12,6 +12,16 @@
       },
       {
         "name": "time",
+        "type": "datetime",
+        "fast": true,
+        "fast_precision": "milliseconds",
+        "input_formats": [
+          "unix_timestamp"
+        ],
+        "output_format": "unix_timestamp_millis"
+      },
+      {
+        "name": "received_time",
         "type": "datetime",
         "fast": true,
         "fast_precision": "milliseconds",
