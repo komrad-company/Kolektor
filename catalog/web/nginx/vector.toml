@@ -6,14 +6,14 @@
 # ==============================================================================
 
 # --- SOURCE ---
-[sources.input]
+[sources.nginx_input]
 type    = "file"
 include = ["${NGINX_ACCESS_LOG:-/var/log/nginx/access.log}"]
 
 # --- TRANSFORM : parse + normalisation OCSF ---
-[transforms.parse_and_normalize]
+[transforms.nginx_parse_and_normalize]
 type   = "remap"
-inputs = ["input"]
+inputs = ["nginx_input"]
 source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
@@ -107,20 +107,20 @@ source = '''
 '''
 
 # --- FILTER : drop malformed ---
-[transforms.filter_valid]
+[transforms.nginx_filter_valid]
 type      = "filter"
-inputs    = ["parse_and_normalize"]
+inputs    = ["nginx_parse_and_normalize"]
 condition = '.class_uid == 4001'
 
 # --- SINK : Quickwit ---
-[sinks.quickwit]
+[sinks.nginx_quickwit]
 type                = "http"
-inputs              = ["filter_valid"]
+inputs              = ["nginx_filter_valid"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit.request]
+[sinks.nginx_quickwit.request]
 headers.Content-Type = "application/x-ndjson"

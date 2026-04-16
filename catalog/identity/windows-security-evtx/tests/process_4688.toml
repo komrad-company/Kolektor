@@ -2,7 +2,7 @@
 name = "Windows Security — 4688 New Process Created"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "winevtx_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -21,7 +21,7 @@ type      = "log"
     CommandLine       = "cmd.exe /c whoami"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "winevtx_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"
@@ -39,7 +39,7 @@ source = '''
 name = "Windows Security — unknown event ID (should be dropped)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "winevtx_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -53,7 +53,7 @@ type      = "log"
 # Verify the VRL sets event_id=0, which causes filter_valid to drop the event.
 # Vector tests cannot assert "no events received", so we check the pre-filter output.
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "winevtx_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

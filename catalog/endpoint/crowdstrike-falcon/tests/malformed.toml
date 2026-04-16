@@ -2,14 +2,14 @@
 name = "CrowdStrike — malformed JSON (no metadata)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "crowdstrike_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
   message = '{"random":"data","without":"metadata_field"}'
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "crowdstrike_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"
@@ -21,14 +21,14 @@ source = '''
 name = "CrowdStrike — not JSON at all"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "crowdstrike_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
   message = "this is not json at all"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "crowdstrike_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

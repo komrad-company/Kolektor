@@ -2,14 +2,14 @@
 name = "FortiGate — traffic deny (implicit policy)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "fortigate_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
   message = 'date=2024-04-14 time=10:30:00 devname="FG100F" devid="FG100FXXXXXXXXXX" logid="0000000020" type="traffic" subtype="forward" level="warning" vd="root" srcip=185.220.101.42 srcport=44820 srcintf="wan1" dstip=10.0.0.1 dstport=22 dstintf="port1" policyid=0 action=deny proto=6 service="SSH" duration=0 sentbyte=0 rcvdbyte=0 sentpkt=0 rcvdpkt=0'
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "fortigate_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

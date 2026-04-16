@@ -2,7 +2,7 @@
 name = "CloudTrail — AccessDenied error"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "cloudtrail_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -24,7 +24,7 @@ type      = "log"
   accountId = "123456789012"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "cloudtrail_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"
@@ -44,7 +44,7 @@ source = '''
 name = "CloudTrail — RunInstances (EC2 launch)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "cloudtrail_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -67,7 +67,7 @@ type      = "log"
   userName  = "devops"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "cloudtrail_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

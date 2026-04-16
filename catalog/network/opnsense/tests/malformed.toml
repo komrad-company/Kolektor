@@ -2,7 +2,7 @@
 name = "OPNsense filterlog — malformed (too few fields)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "opnsense_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -13,7 +13,7 @@ type      = "log"
 
 # Should be dropped by filter_valid (class_uid != 4001)
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "opnsense_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

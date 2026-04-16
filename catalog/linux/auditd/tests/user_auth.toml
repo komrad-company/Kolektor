@@ -2,14 +2,14 @@
 name = "auditd — USER_AUTH success (su)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "auditd_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
   message = "type=USER_AUTH msg=audit(1713091500.456:789): pid=9012 uid=1000 auid=1000 ses=3 msg='op=PAM:authentication grantors=pam_rootok acct=\"root\" exe=\"/usr/bin/su\" hostname=? addr=? terminal=pts/0 res=success'"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "auditd_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

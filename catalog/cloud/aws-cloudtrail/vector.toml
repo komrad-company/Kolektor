@@ -6,15 +6,15 @@
 # ==============================================================================
 
 # --- SOURCE ---
-[sources.input]
+[sources.cloudtrail_input]
 type     = "http_server"
 address  = "0.0.0.0:${LISTEN_PORT:-8516}"
 encoding = "json"
 
 # --- TRANSFORM : parse + normalisation OCSF ---
-[transforms.parse_and_normalize]
+[transforms.cloudtrail_parse_and_normalize]
 type   = "remap"
-inputs = ["input"]
+inputs = ["cloudtrail_input"]
 source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
@@ -146,20 +146,20 @@ source = '''
 '''
 
 # --- FILTER ---
-[transforms.filter_valid]
+[transforms.cloudtrail_filter_valid]
 type      = "filter"
-inputs    = ["parse_and_normalize"]
+inputs    = ["cloudtrail_parse_and_normalize"]
 condition = '.class_uid == 6001'
 
 # --- SINK : Quickwit ---
-[sinks.quickwit]
+[sinks.cloudtrail_quickwit]
 type                = "http"
-inputs              = ["filter_valid"]
+inputs              = ["cloudtrail_filter_valid"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-audit/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit.request]
+[sinks.cloudtrail_quickwit.request]
 headers.Content-Type = "application/x-ndjson"

@@ -2,7 +2,7 @@
 name = "Windows Security — malformed (event_id manquant)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "winevtx_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -17,7 +17,7 @@ type      = "log"
 
 # Sans event_id, le filter_valid drop l'event (.unmapped.event_id == 0)
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "winevtx_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

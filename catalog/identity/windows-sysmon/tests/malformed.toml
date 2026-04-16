@@ -2,7 +2,7 @@
 name = "Sysmon — malformed (winlog absent)"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "sysmon_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -11,7 +11,7 @@ type      = "log"
 
 # Sans .winlog.event_id, .unmapped.event_id == 0 → filter_valid drop
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "sysmon_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"

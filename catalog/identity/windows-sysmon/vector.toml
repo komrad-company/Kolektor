@@ -6,15 +6,15 @@
 # ==============================================================================
 
 # --- SOURCE ---
-[sources.input]
+[sources.sysmon_input]
 type     = "http_server"
 address  = "0.0.0.0:${LISTEN_PORT:-8515}"
 encoding = "json"
 
 # --- TRANSFORM : parse + normalisation OCSF ---
-[transforms.parse_and_normalize]
+[transforms.sysmon_parse_and_normalize]
 type   = "remap"
-inputs = ["input"]
+inputs = ["sysmon_input"]
 source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
@@ -126,20 +126,20 @@ source = '''
 '''
 
 # --- FILTER ---
-[transforms.filter_valid]
+[transforms.sysmon_filter_valid]
 type      = "filter"
-inputs    = ["parse_and_normalize"]
+inputs    = ["sysmon_parse_and_normalize"]
 condition = '.unmapped.event_id != 0'
 
 # --- SINK : Quickwit ---
-[sinks.quickwit]
+[sinks.sysmon_quickwit]
 type                = "http"
-inputs              = ["filter_valid"]
+inputs              = ["sysmon_filter_valid"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.quickwit.request]
+[sinks.sysmon_quickwit.request]
 headers.Content-Type = "application/x-ndjson"

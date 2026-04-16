@@ -2,7 +2,7 @@
 name = "Sysmon — Event 3 Network Connection"
 
 [[tests.inputs]]
-insert_at = "parse_and_normalize"
+insert_at = "sysmon_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
@@ -24,7 +24,7 @@ type      = "log"
     DestinationHostname = "github.com"
 
 [[tests.outputs]]
-extract_from = "parse_and_normalize"
+extract_from = "sysmon_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"
