@@ -19,6 +19,7 @@ inputs = ["input"]
 source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
 
   # Parse auditd key=value format
   # type=SYSCALL msg=audit(1713091425.123:456): arch=c000003e syscall=59 ...
@@ -148,6 +149,7 @@ source = '''
   . = {
     "uid":           .uid,
     "time":          .time,
+    "received_time": .received_time,
     "tenant_id":     .tenant_id,
     "datasource_id": .datasource_id,
     "raw":           .raw

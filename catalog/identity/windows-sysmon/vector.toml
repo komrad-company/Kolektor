@@ -18,6 +18,7 @@ inputs = ["input"]
 source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
 
   # Sysmon via Winlogbeat : .winlog.event_id + .winlog.event_data.*
   event_id = to_int(.winlog.event_id) ?? to_int(.event_id) ?? 0

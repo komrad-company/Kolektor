@@ -19,6 +19,7 @@ inputs = ["input"]
 source = '''
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
 
   # Winlogbeat JSON structure :
   # .winlog.event_id, .winlog.event_data.*, .winlog.computer_name, .timestamp

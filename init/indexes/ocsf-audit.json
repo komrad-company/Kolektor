@@ -33,6 +33,16 @@
         "output_format": "unix_timestamp_millis"
       },
       {
+        "name": "received_time",
+        "type": "datetime",
+        "fast": true,
+        "fast_precision": "milliseconds",
+        "input_formats": [
+          "unix_timestamp"
+        ],
+        "output_format": "unix_timestamp_millis"
+      },
+      {
         "name": "tenant_id",
         "type": "text",
         "fast": true,
