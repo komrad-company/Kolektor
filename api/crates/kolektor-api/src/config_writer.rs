@@ -2,21 +2,20 @@ use anyhow::{Context, Result};
 use kolektor_common::models::Parser;
 use std::path::Path;
 use tokio::fs;
+use toml::{Table, Value};
 
 /// Assemble le contenu TOML Vector agrégé pour tous les parsers actifs.
 ///
-/// Stratégie : concaténation des vector_toml bruts, avec substitution de
-/// `${DATASOURCE_ID}` par `<datasource_base>-<category>-<name>` pour que chaque
-/// parser ait un datasource_id distinct (même logique que l'ancien entrypoint.sh).
-/// Les autres variables (`${TENANT_ID}`, `${QUICKWIT_ENDPOINT}`, `${LISTEN_PORT}`)
-/// sont laissées intactes pour que Vector les expande au runtime.
+/// Stratégie : Parse chaque parser actif en `toml::Table`, puis fusionne
+/// les blocs `sources`, `transforms`, et `sinks`. 
+/// Substitue `${DATASOURCE_ID}` par `<datasource_base>-<category>-<name>`.
 pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> String {
-    let mut out = String::new();
-    out.push_str("# Kolektor — config générée automatiquement, ne pas éditer à la main\n");
-    out.push_str(&format!("# Parsers actifs : {}\n\n", parsers.len()));
+    let mut header = String::new();
+    header.push_str("# Kolektor — config générée automatiquement, ne pas éditer à la main\n");
+    header.push_str(&format!("# Parsers actifs : {}\n\n", parsers.len()));
 
     if parsers.is_empty() {
-        out.push_str(
+        header.push_str(
             "# Aucun parser actif : stub internal_logs -> blackhole pour que Vector démarre.\n\
              [sources._kolektor_idle]\n\
              type = \"internal_logs\"\n\n\
@@ -25,8 +24,10 @@ pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> String {
              inputs = [\"_kolektor_idle\"]\n\
              print_interval_secs = 0\n",
         );
-        return out;
+        return header;
     }
+
+    let mut merged = Table::new();
 
     for parser in parsers {
         let ds_id = format!(
@@ -36,21 +37,44 @@ pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> String {
         );
         let substituted = parser.vector_toml.replace("${DATASOURCE_ID}", &ds_id);
 
-        out.push_str(&format!(
-            "# ============================================================\n\
-             # {} (source_type={}, version={})\n\
-             # datasource_id = {}\n\
-             # ============================================================\n",
-            parser.display_name, parser.source_type, parser.version, ds_id
-        ));
-        out.push_str(&substituted);
-        if !substituted.ends_with('\n') {
-            out.push('\n');
+        let parsed: Table = match toml::from_str(&substituted) {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::error!("Failed to parse TOML for {}: {}", parser.source_type, e);
+                continue;
+            }
+        };
+
+        for (root_key, root_val) in parsed {
+            if !merged.contains_key(&root_key) {
+                merged.insert(root_key.clone(), Value::Table(Table::new()));
+            }
+
+            if let Value::Table(parser_section) = root_val {
+                if let Some(Value::Table(global_section)) = merged.get_mut(&root_key) {
+                    for (component_name, component_val) in parser_section {
+                        if global_section.contains_key(&component_name) {
+                            tracing::error!(
+                                "Collision detected: component '{}' in section '{}' from parser '{}' already exists",
+                                component_name, root_key, parser.source_type
+                            );
+                        }
+                        global_section.insert(component_name, component_val);
+                    }
+                }
+            } else {
+                // S'il ne s'agit pas d'une table (cas rare pour vector.toml)
+                merged.insert(root_key, root_val);
+            }
         }
-        out.push('\n');
     }
 
-    out
+    let toml_str = toml::to_string(&merged).unwrap_or_else(|e| {
+        tracing::error!("Failed to serialize merged TOML: {}", e);
+        String::new()
+    });
+
+    format!("{}{}", header, toml_str)
 }
 
 /// Écrit le fichier cible de façon atomique (tmp + rename).
@@ -120,8 +144,8 @@ source = '.datasource_id = "${DATASOURCE_ID}"'"#,
 source = '.datasource_id = "${DATASOURCE_ID}"'"#,
         );
         let out = assemble_toml(&[p1, p2], "ds-bibihome");
-        assert!(out.contains(r#".datasource_id = "ds-bibihome-linux-syslog""#));
-        assert!(out.contains(r#".datasource_id = "ds-bibihome-network-opnsense""#));
+        assert!(out.contains("ds-bibihome-linux-syslog"));
+        assert!(out.contains("ds-bibihome-network-opnsense"));
         assert!(!out.contains("${DATASOURCE_ID}"));
     }
 
