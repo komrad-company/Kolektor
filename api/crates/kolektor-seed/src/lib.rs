@@ -56,7 +56,13 @@ pub fn scan_catalog(catalog_dir: &Path) -> Result<Vec<CatalogParser>> {
                 continue;
             }
 
-            match parse_parser_dir(&category, &name, &parser_entry.path(), &vector_toml_path, &manifest_path) {
+            match parse_parser_dir(
+                &category,
+                &name,
+                &parser_entry.path(),
+                &vector_toml_path,
+                &manifest_path,
+            ) {
                 Ok(parser) => parsers.push(parser),
                 Err(e) => tracing::warn!("Failed to parse {}: {}", name, e),
             }
@@ -79,7 +85,7 @@ fn parse_parser_dir(
 
     let manifest_content = std::fs::read_to_string(manifest_path)
         .with_context(|| format!("reading manifest {}", manifest_path.display()))?;
-    
+
     let manifest: Manifest = serde_yaml::from_str(&manifest_content)
         .with_context(|| format!("parsing yaml {}", manifest_path.display()))?;
 

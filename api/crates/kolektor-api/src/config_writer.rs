@@ -7,7 +7,7 @@ use toml::{Table, Value};
 /// Assemble le contenu TOML Vector agrégé pour tous les parsers actifs.
 ///
 /// Stratégie : Parse chaque parser actif en `toml::Table`, puis fusionne
-/// les blocs `sources`, `transforms`, et `sinks`. 
+/// les blocs `sources`, `transforms`, et `sinks`.
 /// Substitue `${DATASOURCE_ID}` par `<datasource_base>-<category>-<name>`.
 pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> String {
     let mut header = String::new();
@@ -56,7 +56,9 @@ pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> String {
                         if global_section.contains_key(&component_name) {
                             tracing::error!(
                                 "Collision detected: component '{}' in section '{}' from parser '{}' already exists",
-                                component_name, root_key, parser.source_type
+                                component_name,
+                                root_key,
+                                parser.source_type
                             );
                         }
                         global_section.insert(component_name, component_val);
