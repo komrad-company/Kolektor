@@ -15,9 +15,36 @@ kolektor/
 │   ├── linux/          # syslog, auditd, auth-log
 │   ├── cloud/          # CloudTrail (OCSF 6001)
 │   └── web/            # nginx (OCSF 4001)
-├── ci/                 # Scripts CI (validate, test, coverage, report)
-└── .github/workflows/  # GitHub Actions → ghcr.io/komrad-company/kolektor
+├── api/                # Workspace Cargo : kolektor-api (bin), kolektor-common, kolektor-seed
+│   ├── Cargo.toml
+│   ├── crates/
+│   └── migrations/     # sqlx migrations (schema PG `kolektor`)
+├── ci/                 # Scripts CI Vector (validate, test, coverage, report)
+├── Dockerfile          # Multi-stage : build Rust puis runtime Vector + kolektor-api
+└── .github/workflows/  # GitHub Actions : Vector CI + Rust CI → ghcr.io/komrad-company/kolektor
 ```
+
+## API REST — architecture
+- **Binaire unique** `kolektor-api` avec 3 subcommands : `init`, `serve`, `token`.
+- **1 pod** dans la namespace `kolektor` (voir argocd repo) :
+  - `initContainer` (`kolektor-api init`) : migrate + seed catalog → DB + ecrit le fichier Vector initial sur emptyDir partage.
+  - `api` (`kolektor-api serve`) : Axum sur :8080, auth Bearer token bcrypt. Sur `PUT /v1/parsers/{cat}/{name}/enabled`, reecrit atomiquement `/etc/vector/kolektor/sources.toml`.
+  - `vector` : `--watch-config` sur `/etc/vector/kolektor/sources.toml`, ports 5140-5143.
+- **Source de verite** : PostgreSQL (schema `kolektor` sur l'instance partagee Kontrol). Tables `parsers`, `api_tokens`, `sync_events`.
+- **Catalog Git = seed** : les `catalog/*/*/vector.toml` sont importes en DB au premier `init` (UPSERT preserve `enabled`, incremente `version` si le TOML change).
+- **Endpoints v1** :
+  - `GET  /v1/health` (no auth)
+  - `GET  /v1/status` · `GET /v1/parsers` · `GET /v1/parsers/{cat}/{name}` · `PUT /v1/parsers/{cat}/{name}/enabled` (Bearer token)
+- **Idempotence** : `PUT enabled=true` repete = meme reponse, un seul `sync_event`, pas de reload Vector parasite (compat Terraform future).
+
+## Bootstrap token API
+Apres le premier deploiement :
+```bash
+kubectl -n kolektor exec -it deploy/kolektor -c api -- \
+  kolektor-api token create --name bootstrap --tenant-id bibihome
+```
+Le secret est affiche une seule fois ; a stocker cote client (ex: Kontrol secret store).
+Usage : `curl -H "Authorization: Bearer <token>" https://kolektor-api.bibihome.lan/v1/parsers`.
 
 ## Conventions
 - **Format** : TOML pour les configs Vector, VRL inline dans les transforms
