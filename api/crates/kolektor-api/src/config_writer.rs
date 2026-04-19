@@ -15,6 +15,19 @@ pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> String {
     out.push_str("# Kolektor — config générée automatiquement, ne pas éditer à la main\n");
     out.push_str(&format!("# Parsers actifs : {}\n\n", parsers.len()));
 
+    if parsers.is_empty() {
+        out.push_str(
+            "# Aucun parser actif : stub internal_logs -> blackhole pour que Vector démarre.\n\
+             [sources._kolektor_idle]\n\
+             type = \"internal_logs\"\n\n\
+             [sinks._kolektor_blackhole]\n\
+             type = \"blackhole\"\n\
+             inputs = [\"_kolektor_idle\"]\n\
+             print_interval_secs = 0\n",
+        );
+        return out;
+    }
+
     for parser in parsers {
         let ds_id = format!(
             "{}-{}",
@@ -90,6 +103,8 @@ mod tests {
     fn empty_parsers_still_produces_header() {
         let out = assemble_toml(&[], "ds-acme");
         assert!(out.contains("Parsers actifs : 0"));
+        assert!(out.contains("_kolektor_idle"));
+        assert!(out.contains("_kolektor_blackhole"));
     }
 
     #[test]
