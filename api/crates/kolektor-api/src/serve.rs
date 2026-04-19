@@ -30,9 +30,9 @@ pub async fn run(args: ServeArgs) -> Result<()> {
     let authed = Router::new()
         .route("/status", get(routes::status::get_status))
         .route("/parsers", get(routes::parsers::list))
-        .route("/parsers/{category}/{name}", get(routes::parsers::get_one))
+        .route("/parsers/:category/:name", get(routes::parsers::get_one))
         .route(
-            "/parsers/{category}/{name}/enabled",
+            "/parsers/:category/:name/enabled",
             put(routes::parsers::put_enabled),
         )
         .layer(axum_middleware::from_fn_with_state(
