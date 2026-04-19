@@ -17,3 +17,4 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 uuid = { workspace = true }
+serde_yaml = "0.9.34"

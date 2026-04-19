@@ -1,8 +1,16 @@
 use anyhow::{Context, Result};
-use regex::Regex;
+use serde::Deserialize;
 use sqlx::PgPool;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Manifest {
+    pub display_name: String,
+    pub default_port: Option<i32>,
+    pub ocsf_class_uid: Option<i32>,
+    pub ocsf_category_uid: Option<i32>,
+}
 
 #[derive(Debug, Clone)]
 pub struct CatalogParser {
@@ -40,13 +48,18 @@ pub fn scan_catalog(catalog_dir: &Path) -> Result<Vec<CatalogParser>> {
             }
             let name = parser_entry.file_name().to_string_lossy().to_string();
             let vector_toml_path = parser_entry.path().join("vector.toml");
-            if !vector_toml_path.exists() {
+            let manifest_path = parser_entry.path().join("manifest.yaml");
+            if !vector_toml_path.exists() || !manifest_path.exists() {
+                if vector_toml_path.exists() && !manifest_path.exists() {
+                    tracing::warn!("Skipping {} because manifest.yaml is missing", name);
+                }
                 continue;
             }
 
-            let parser =
-                parse_parser_dir(&category, &name, &parser_entry.path(), &vector_toml_path)?;
-            parsers.push(parser);
+            match parse_parser_dir(&category, &name, &parser_entry.path(), &vector_toml_path, &manifest_path) {
+                Ok(parser) => parsers.push(parser),
+                Err(e) => tracing::warn!("Failed to parse {}: {}", name, e),
+            }
         }
     }
 
@@ -59,64 +72,32 @@ fn parse_parser_dir(
     name: &str,
     parser_dir: &Path,
     vector_toml_path: &Path,
+    manifest_path: &Path,
 ) -> Result<CatalogParser> {
     let vector_toml = std::fs::read_to_string(vector_toml_path)
         .with_context(|| format!("reading {}", vector_toml_path.display()))?;
 
+    let manifest_content = std::fs::read_to_string(manifest_path)
+        .with_context(|| format!("reading manifest {}", manifest_path.display()))?;
+    
+    let manifest: Manifest = serde_yaml::from_str(&manifest_content)
+        .with_context(|| format!("parsing yaml {}", manifest_path.display()))?;
+
     let source_type = format!("{category}/{name}");
-    let display_name = humanize(name);
-    let default_port = extract_default_port(&vector_toml);
-    let (ocsf_class_uid, ocsf_category_uid) = extract_ocsf_ids(&vector_toml);
-    let ocsf_index = ocsf_index_for(ocsf_class_uid);
+    let ocsf_index = ocsf_index_for(manifest.ocsf_class_uid);
     let description = read_description(parser_dir);
 
     Ok(CatalogParser {
         source_type,
-        display_name,
+        display_name: manifest.display_name,
         category: category.to_string(),
-        default_port,
-        ocsf_class_uid,
-        ocsf_category_uid,
+        default_port: manifest.default_port,
+        ocsf_class_uid: manifest.ocsf_class_uid,
+        ocsf_category_uid: manifest.ocsf_category_uid,
         ocsf_index,
         vector_toml,
         description,
     })
-}
-
-fn humanize(name: &str) -> String {
-    name.split(['-', '_'])
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                Some(c) => c.to_uppercase().chain(chars).collect(),
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn extract_default_port(toml: &str) -> Option<i32> {
-    let re = Regex::new(r"\$\{LISTEN_PORT:-(\d+)\}").ok()?;
-    re.captures(toml)
-        .and_then(|c| c.get(1))
-        .and_then(|m| m.as_str().parse().ok())
-}
-
-fn extract_ocsf_ids(toml: &str) -> (Option<i32>, Option<i32>) {
-    let class_re = Regex::new(r#"class_uid"?\s*[:=]\s*"?(\d+)"?"#).ok();
-    let cat_re = Regex::new(r#"category_uid"?\s*[:=]\s*"?(\d+)"?"#).ok();
-    let class_uid = class_re
-        .as_ref()
-        .and_then(|re| re.captures(toml))
-        .and_then(|c| c.get(1))
-        .and_then(|m| m.as_str().parse().ok());
-    let category_uid = cat_re
-        .as_ref()
-        .and_then(|re| re.captures(toml))
-        .and_then(|c| c.get(1))
-        .and_then(|m| m.as_str().parse().ok());
-    (class_uid, category_uid)
 }
 
 fn ocsf_index_for(class_uid: Option<i32>) -> Option<String> {
@@ -211,44 +192,6 @@ pub struct SeedReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn humanize_basic() {
-        assert_eq!(humanize("opnsense"), "Opnsense");
-        assert_eq!(humanize("auth-log"), "Auth Log");
-        assert_eq!(humanize("aws-cloudtrail"), "Aws Cloudtrail");
-        assert_eq!(humanize("windows-security-evtx"), "Windows Security Evtx");
-    }
-
-    #[test]
-    fn extract_port_from_toml() {
-        let toml = r#"
-        [sources.input]
-        type = "syslog"
-        address = "0.0.0.0:${LISTEN_PORT:-5141}"
-        "#;
-        assert_eq!(extract_default_port(toml), Some(5141));
-    }
-
-    #[test]
-    fn extract_port_missing() {
-        let toml = "nothing here";
-        assert_eq!(extract_default_port(toml), None);
-    }
-
-    #[test]
-    fn extract_ocsf_from_vrl() {
-        let toml = r#"
-        source = '''
-        .class_uid = 6001
-        .category_uid = 6
-        .severity_id = 1
-        '''
-        "#;
-        let (class_uid, cat_uid) = extract_ocsf_ids(toml);
-        assert_eq!(class_uid, Some(6001));
-        assert_eq!(cat_uid, Some(6));
-    }
 
     #[test]
     fn index_mapping() {

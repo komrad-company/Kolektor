@@ -1,0 +1,4 @@
+display_name: Fortinet Fortigate
+default_port: 5144
+ocsf_class_uid: 4001
+ocsf_category_uid: 4

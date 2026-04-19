@@ -139,9 +139,6 @@ pub async fn put_enabled(
     .fetch_all(&mut *tx)
     .await?;
 
-    let content = config_writer::assemble_toml(&active, &state.datasource_base);
-    config_writer::write_atomic(&state.vector_output, &content).await?;
-
     let event_type = if body.enabled {
         "parser_enabled"
     } else {
@@ -167,6 +164,9 @@ pub async fn put_enabled(
     .await?;
 
     tx.commit().await?;
+
+    let content = config_writer::assemble_toml(&active, &state.datasource_base);
+    config_writer::write_atomic(&state.vector_output, &content).await?;
 
     tracing::info!(%source_type, enabled = body.enabled, "parser updated, vector config rewritten");
 

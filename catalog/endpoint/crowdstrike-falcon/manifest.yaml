@@ -1,0 +1,4 @@
+display_name: Crowdstrike Falcon
+default_port: 1514
+ocsf_class_uid: 0
+ocsf_category_uid: 0
