@@ -2,3 +2,4 @@ ci/results/
 *.tmp
 .env
 .claude/
+api/target/
