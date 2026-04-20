@@ -152,13 +152,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # --- Scan de vulnérabilités avec Trivy ---
-      # Repo privé en Free → pas de SARIF GHAS. Trivy affiche dans les logs et casse le build sur CRITICAL.
-      - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@master
+      # --- Scan de vulnérabilités avec Grype ---
+      # Repo privé en Free → pas de SARIF GHAS. Grype affiche dans les logs et casse le build sur CRITICAL.
+      - name: Scan image with Grype
+        uses: anchore/scan-action@v7.4.0
         with:
-          image-ref: "${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          format: table
-          exit-code: "1"
-          severity: CRITICAL
-          ignore-unfixed: true
+          image: "${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          fail-build: true
+          severity-cutoff: critical
+          only-fixed: true
