@@ -34,6 +34,12 @@ RUN touch crates/kolektor-api/src/main.rs \
 # ==============================================================================
 FROM timberio/vector:0.54.0-debian
 
+# Patch des CVEs OS (openssl, libc, dpkg...) — l'image Vector upstream n'est
+# pas rebuild à chaque advisory Debian, donc on applique les security patches.
+RUN apt-get update \
+ && apt-get upgrade -y \
+ && rm -rf /var/lib/apt/lists/*
+
 LABEL maintainer="Benoit Caillabet"
 LABEL description="Vector.dev + kolektor-api REST backend"
 
