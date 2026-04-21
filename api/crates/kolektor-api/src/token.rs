@@ -19,11 +19,11 @@ async fn create(args: TokenCreateArgs) -> Result<()> {
 
     let mut bytes = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut bytes);
-    let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
+    let id = Uuid::now_v7();
+    let secret = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
+    let token = format!("klt_{}_{}", id.simple(), secret);
 
     let hash = bcrypt::hash(&token, bcrypt::DEFAULT_COST).context("hashing token with bcrypt")?;
-
-    let id = Uuid::now_v7();
     sqlx::query(
         "INSERT INTO kolektor.api_tokens (id, name, token_hash, tenant_id) \
          VALUES ($1, $2, $3, $4)",

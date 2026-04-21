@@ -1,6 +1,6 @@
 # ==============================================================================
 # Windows Sysmon — Events 1/3/7/11/22
-# OCSF Class : 1003 (Process Activity) / 4001 (Network Activity) / 1001 (File)
+# OCSF Class : 1003 (Process Activity) / 4001 (Network Activity) / 1001 (File) / 4003 (DNS)
 # Input      : HTTP (JSON from Winlogbeat/NXLog)
 # Tested with: Sysmon 15.x, Windows 10/11/Server 2022
 # ==============================================================================
@@ -131,15 +131,49 @@ type      = "filter"
 inputs    = ["sysmon_parse_and_normalize"]
 condition = '.unmapped.event_id != 0'
 
-# --- SINK : Quickwit ---
-[sinks.sysmon_quickwit]
+# --- ROUTE : dispatch par class_uid ---
+[transforms.sysmon_route_by_class]
+type   = "route"
+inputs = ["sysmon_filter_valid"]
+route.endpoint = '.class_uid == 1001 || .class_uid == 1003'
+route.network  = '.class_uid == 4001'
+route.dns      = '.class_uid == 4003'
+
+# --- SINK : Quickwit ocsf-endpoint ---
+[sinks.sysmon_quickwit_endpoint]
 type                = "http"
-inputs              = ["sysmon_filter_valid"]
+inputs              = ["sysmon_route_by_class.endpoint"]
 uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
-[sinks.sysmon_quickwit.request]
+[sinks.sysmon_quickwit_endpoint.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit ocsf-network ---
+[sinks.sysmon_quickwit_network]
+type                = "http"
+inputs              = ["sysmon_route_by_class.network"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.sysmon_quickwit_network.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit ocsf-dns ---
+[sinks.sysmon_quickwit_dns]
+type                = "http"
+inputs              = ["sysmon_route_by_class.dns"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-dns/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.sysmon_quickwit_dns.request]
 headers.Content-Type = "application/x-ndjson"

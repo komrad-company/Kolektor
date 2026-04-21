@@ -33,7 +33,7 @@ pub async fn run(args: InitArgs) -> Result<()> {
     )
     .fetch_all(&pool)
     .await?;
-    let content = config_writer::assemble_toml(&enabled, &datasource_base);
+    let content = config_writer::assemble_toml(&enabled, &datasource_base)?;
     let output = PathBuf::from(&args.vector_output);
     config_writer::write_atomic(&output, &content).await?;
 

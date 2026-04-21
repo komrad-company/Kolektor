@@ -25,6 +25,7 @@ pub async fn run(args: ServeArgs) -> Result<()> {
         pool: pool.clone(),
         datasource_base,
         vector_output: PathBuf::from(&args.vector_output),
+        tenant_id: args.tenant_id.clone(),
     };
 
     let authed = Router::new()
@@ -36,10 +37,10 @@ pub async fn run(args: ServeArgs) -> Result<()> {
             put(routes::parsers::put_enabled),
         )
         .layer(axum_middleware::from_fn_with_state(
-            pool.clone(),
+            state.clone(),
             middleware::require_bearer_token,
         ))
-        .with_state(state);
+        .with_state(state.clone());
 
     let public = Router::new()
         .route("/health", get(routes::health::health))

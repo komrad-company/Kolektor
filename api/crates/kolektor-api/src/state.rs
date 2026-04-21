@@ -8,6 +8,7 @@ pub struct AppState {
     pub pool: PgPool,
     pub datasource_base: String,
     pub vector_output: PathBuf,
+    pub tenant_id: Option<String>,
 }
 
 impl FromRef<AppState> for PgPool {

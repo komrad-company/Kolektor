@@ -128,9 +128,12 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 | Index            | Classe OCSF                | category_uid | Sources typiques               |
 |------------------|----------------------------|--------------|--------------------------------|
 | `ocsf-network`   | 4001 Network Activity      | 4            | opnsense, fortigate, nginx     |
+| `ocsf-http`      | 4002 HTTP Activity         | 4            | traefik                        |
+| `ocsf-dns`       | 4003 DNS Activity          | 4            | unbound, sysmon DNS            |
 | `ocsf-endpoint`  | 1001/1003 File/Process     | 1            | crowdstrike, sysmon, auditd    |
 | `ocsf-identity`  | 3001/3002 Account/Auth     | 3            | windows-evtx, auth-log         |
 | `ocsf-audit`     | 6001 API Activity          | 6            | cloudtrail, syslog             |
+| `ocsf-k8s`       | 6003 Kubernetes API Activity | 6          | kubernetes-audit               |
 
 ## CI Pipeline
 

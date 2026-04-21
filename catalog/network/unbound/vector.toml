@@ -8,7 +8,7 @@
 # --- SOURCE ---
 [sources.unbound_input]
 type    = "syslog"
-address = "0.0.0.0:${LISTEN_PORT:-5144}"
+address = "0.0.0.0:${LISTEN_PORT:-5145}"
 mode    = "tcp"
 
 # --- TRANSFORM : parse + normalisation OCSF ---
