@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Kolektor — initialisation des index Quickwit
-# Crée les 4 index OCSF si ils n'existent pas déjà (idempotent)
+# Crée les index OCSF si ils n'existent pas déjà (idempotent)
 # Usage : QUICKWIT_ENDPOINT=http://... ./create-indexes.sh
 # =============================================================================
 set -euo pipefail
 
 QUICKWIT_ENDPOINT="${QUICKWIT_ENDPOINT:-http://quickwit-searcher.quickwit:7280}"
 INDEXES_DIR="$(dirname "$0")/indexes"
-INDEXES="ocsf-network ocsf-endpoint ocsf-identity ocsf-audit raw-logs"
+INDEXES="ocsf-network ocsf-http ocsf-dns ocsf-endpoint ocsf-identity ocsf-audit ocsf-k8s raw-logs"
 
 echo "Quickwit endpoint : $QUICKWIT_ENDPOINT"
 echo ""

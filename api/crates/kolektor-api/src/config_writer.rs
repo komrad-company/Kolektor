@@ -1,15 +1,17 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use kolektor_common::models::Parser;
+use std::collections::BTreeMap;
 use std::path::Path;
 use tokio::fs;
 use toml::{Table, Value};
+use uuid::Uuid;
 
 /// Assemble le contenu TOML Vector agrégé pour tous les parsers actifs.
 ///
 /// Stratégie : Parse chaque parser actif en `toml::Table`, puis fusionne
 /// les blocs `sources`, `transforms`, et `sinks`.
 /// Substitue `${DATASOURCE_ID}` par `<datasource_base>-<category>-<name>`.
-pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> String {
+pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> Result<String> {
     let mut header = String::new();
     header.push_str("# Kolektor — config générée automatiquement, ne pas éditer à la main\n");
     header.push_str(&format!("# Parsers actifs : {}\n\n", parsers.len()));
@@ -24,10 +26,11 @@ pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> String {
              inputs = [\"_kolektor_idle\"]\n\
              print_interval_secs = 0\n",
         );
-        return header;
+        return Ok(header);
     }
 
     let mut merged = Table::new();
+    let mut source_addresses = BTreeMap::<String, String>::new();
 
     for parser in parsers {
         let ds_id = format!(
@@ -35,15 +38,10 @@ pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> String {
             datasource_base,
             parser.source_type.replace('/', "-")
         );
-        let substituted = parser.vector_toml.replace("${DATASOURCE_ID}", &ds_id);
+        let substituted = substitute_runtime_vars(parser, &ds_id);
 
-        let parsed: Table = match toml::from_str(&substituted) {
-            Ok(t) => t,
-            Err(e) => {
-                tracing::error!("Failed to parse TOML for {}: {}", parser.source_type, e);
-                continue;
-            }
-        };
+        let parsed: Table = toml::from_str(&substituted)
+            .with_context(|| format!("parsing TOML for parser {}", parser.source_type))?;
 
         for (root_key, root_val) in parsed {
             if !merged.contains_key(&root_key) {
@@ -54,12 +52,19 @@ pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> String {
                 if let Some(Value::Table(global_section)) = merged.get_mut(&root_key) {
                     for (component_name, component_val) in parser_section {
                         if global_section.contains_key(&component_name) {
-                            tracing::error!(
-                                "Collision detected: component '{}' in section '{}' from parser '{}' already exists",
-                                component_name,
+                            bail!(
+                                "component collision: [{}.{component_name}] from parser {} already exists",
                                 root_key,
                                 parser.source_type
                             );
+                        }
+                        if root_key == "sources" {
+                            detect_address_collision(
+                                &mut source_addresses,
+                                &component_name,
+                                &component_val,
+                                &parser.source_type,
+                            )?;
                         }
                         global_section.insert(component_name, component_val);
                     }
@@ -71,12 +76,61 @@ pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> String {
         }
     }
 
-    let toml_str = toml::to_string(&merged).unwrap_or_else(|e| {
-        tracing::error!("Failed to serialize merged TOML: {}", e);
-        String::new()
-    });
+    let toml_str = toml::to_string(&merged).context("serializing merged TOML")?;
 
-    format!("{}{}", header, toml_str)
+    Ok(format!("{}{}", header, toml_str))
+}
+
+fn substitute_runtime_vars(parser: &Parser, datasource_id: &str) -> String {
+    let with_datasource = parser
+        .vector_toml
+        .replace("${DATASOURCE_ID}", datasource_id);
+    match parser.default_port {
+        Some(port) => replace_listen_port_placeholders(&with_datasource, port),
+        None => with_datasource,
+    }
+}
+
+fn replace_listen_port_placeholders(input: &str, port: i32) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut rest = input;
+    while let Some(start) = rest.find("${LISTEN_PORT") {
+        output.push_str(&rest[..start]);
+        let after_start = &rest[start..];
+        if let Some(end) = after_start.find('}') {
+            output.push_str(&port.to_string());
+            rest = &after_start[end + 1..];
+        } else {
+            output.push_str(after_start);
+            return output;
+        }
+    }
+    output.push_str(rest);
+    output
+}
+
+fn detect_address_collision(
+    source_addresses: &mut BTreeMap<String, String>,
+    component_name: &str,
+    component_val: &Value,
+    source_type: &str,
+) -> Result<()> {
+    let Some(address) = component_val
+        .as_table()
+        .and_then(|t| t.get("address"))
+        .and_then(Value::as_str)
+    else {
+        return Ok(());
+    };
+
+    if let Some(existing) = source_addresses.insert(address.to_string(), component_name.to_string())
+    {
+        bail!(
+            "source address collision on {address}: {existing} and {component_name} ({source_type})"
+        );
+    }
+
+    Ok(())
 }
 
 /// Écrit le fichier cible de façon atomique (tmp + rename).
@@ -87,7 +141,11 @@ pub async fn write_atomic(path: &Path, content: &str) -> Result<()> {
             .with_context(|| format!("creating parent dir {}", parent.display()))?;
     }
 
-    let tmp = path.with_extension("toml.tmp");
+    let file_name = path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("sources.toml");
+    let tmp = path.with_file_name(format!(".{file_name}.{}.tmp", Uuid::now_v7()));
     fs::write(&tmp, content.as_bytes())
         .await
         .with_context(|| format!("writing {}", tmp.display()))?;
@@ -128,6 +186,7 @@ mod tests {
     #[test]
     fn empty_parsers_still_produces_header() {
         let out = assemble_toml(&[], "ds-acme");
+        let out = out.unwrap();
         assert!(out.contains("Parsers actifs : 0"));
         assert!(out.contains("_kolektor_idle"));
         assert!(out.contains("_kolektor_blackhole"));
@@ -146,6 +205,7 @@ source = '.datasource_id = "${DATASOURCE_ID}"'"#,
 source = '.datasource_id = "${DATASOURCE_ID}"'"#,
         );
         let out = assemble_toml(&[p1, p2], "ds-acme");
+        let out = out.unwrap();
         assert!(out.contains("ds-acme-linux-syslog"));
         assert!(out.contains("ds-acme-network-opnsense"));
         assert!(!out.contains("${DATASOURCE_ID}"));
@@ -161,9 +221,58 @@ tenant = "${TENANT_ID}"
 uri = "${QUICKWIT_ENDPOINT}/api/v1/x/ingest""#,
         );
         let out = assemble_toml(&[p], "ds-acme");
+        let out = out.unwrap();
         assert!(out.contains("${LISTEN_PORT:-5141}"));
         assert!(out.contains("${TENANT_ID}"));
         assert!(out.contains("${QUICKWIT_ENDPOINT}"));
+    }
+
+    #[test]
+    fn listen_port_is_substituted_from_default_port() {
+        let mut p = fixture(
+            "linux/syslog",
+            r#"[sources.x]
+type = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-5141}""#,
+        );
+        p.default_port = Some(5141);
+        let out = assemble_toml(&[p], "ds-acme").unwrap();
+        assert!(out.contains("0.0.0.0:5141"));
+        assert!(!out.contains("${LISTEN_PORT"));
+    }
+
+    #[test]
+    fn duplicate_source_addresses_are_rejected() {
+        let mut p1 = fixture(
+            "linux/syslog",
+            r#"[sources.a]
+type = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-5141}""#,
+        );
+        p1.default_port = Some(5141);
+        let mut p2 = fixture(
+            "linux/auth-log",
+            r#"[sources.b]
+type = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-5142}""#,
+        );
+        p2.default_port = Some(5141);
+        let err = assemble_toml(&[p1, p2], "ds-acme").unwrap_err();
+        assert!(err.to_string().contains("source address collision"));
+    }
+
+    #[test]
+    fn component_collisions_are_rejected() {
+        let p1 = fixture(
+            "linux/syslog",
+            "[transforms.shared]\ntype = \"remap\"\nsource = \".\"",
+        );
+        let p2 = fixture(
+            "linux/auth-log",
+            "[transforms.shared]\ntype = \"remap\"\nsource = \".\"",
+        );
+        let err = assemble_toml(&[p1, p2], "ds-acme").unwrap_err();
+        assert!(err.to_string().contains("component collision"));
     }
 
     #[tokio::test]

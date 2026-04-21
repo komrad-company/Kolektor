@@ -79,6 +79,9 @@ pub struct ServeArgs {
     #[arg(long, default_value = "0.0.0.0:8080", env = "LISTEN_ADDR")]
     pub listen_addr: String,
 
+    #[arg(long, env = "TENANT_ID")]
+    pub tenant_id: Option<String>,
+
     #[arg(long, env = "DATABASE_URL")]
     pub database_url: String,
 

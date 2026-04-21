@@ -11,6 +11,8 @@ use crate::config_writer;
 use crate::error::ApiError;
 use crate::state::AppState;
 
+const CONFIG_WRITE_LOCK_ID: i64 = 0x4b6f6c656b746f72;
+
 #[derive(Debug, Deserialize, Default)]
 pub struct ListQuery {
     pub enabled: Option<bool>,
@@ -110,6 +112,11 @@ pub async fn put_enabled(
 
     let mut tx = state.pool.begin().await?;
 
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(CONFIG_WRITE_LOCK_ID)
+        .execute(&mut *tx)
+        .await?;
+
     let current: Option<Parser> = sqlx::query_as::<_, Parser>(
         "SELECT * FROM kolektor.parsers WHERE source_type = $1 FOR UPDATE",
     )
@@ -139,6 +146,9 @@ pub async fn put_enabled(
     .fetch_all(&mut *tx)
     .await?;
 
+    let content = config_writer::assemble_toml(&active, &state.datasource_base)?;
+    config_writer::write_atomic(&state.vector_output, &content).await?;
+
     let event_type = if body.enabled {
         "parser_enabled"
     } else {
@@ -164,9 +174,6 @@ pub async fn put_enabled(
     .await?;
 
     tx.commit().await?;
-
-    let content = config_writer::assemble_toml(&active, &state.datasource_base);
-    config_writer::write_atomic(&state.vector_output, &content).await?;
 
     tracing::info!(%source_type, enabled = body.enabled, "parser updated, vector config rewritten");
 
