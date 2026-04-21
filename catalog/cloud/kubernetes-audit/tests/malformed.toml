@@ -1,0 +1,21 @@
+[[tests]]
+name = "k8s-audit — input non-JSON (malformed)"
+
+[[tests.inputs]]
+insert_at = "k8s_audit_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = "not a json line at all — should be dropped"
+
+[[tests.outputs]]
+extract_from = "k8s_audit_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.category_uid, 0)
+  assert_eq!(.severity_id, 0)
+  assert_eq!(.raw, "not a json line at all — should be dropped")
+'''

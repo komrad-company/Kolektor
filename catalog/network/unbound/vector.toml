@@ -1,0 +1,139 @@
+# ==============================================================================
+# Unbound DNS (OPNsense) — query log
+# OCSF Class : 4003 (DNS Activity)
+# Input      : Syslog TCP (forwarde depuis OPNsense)
+# Tested with: OPNsense 24.x / Unbound 1.19.x (log-queries: yes, verbosity >= 1)
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.unbound_input]
+type    = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-5144}"
+mode    = "tcp"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.unbound_parse_and_normalize]
+type   = "remap"
+inputs = ["unbound_input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  raw_msg = string!(.message)
+
+  # Format unbound query log (verbose info) :
+  #   [1713091425] unbound[12345:0] info: 10.0.0.5 example.com. A IN
+  # OPNsense peut aussi livrer la variante sans prefix :
+  #   info: 10.0.0.5 example.com. A IN
+  # On cherche la queue : CLIENT_IP QNAME. QTYPE QCLASS
+  parsed = parse_regex(raw_msg, r'(?P<client>(?:\d{1,3}\.){3}\d{1,3}|[0-9a-fA-F:]+)\s+(?P<qname>\S+?)\.?\s+(?P<qtype>[A-Z0-9]+)\s+(?P<qclass>[A-Z]+)\s*$') ?? {}
+
+  client_ip = parsed.client
+  valid = is_string(client_ip) && client_ip != ""
+
+  if valid {
+    # Les groupes de parse_regex sont typés string quand la capture a réussi
+    qname_raw = to_string!(parsed.qname)
+    # Enlever le point final eventuel (FQDN canonique unbound)
+    qname = replace(qname_raw, r'\.$', "")
+    qtype = to_string!(parsed.qtype)
+    qclass = to_string!(parsed.qclass)
+
+    ts = to_unix_timestamp(.timestamp, unit: "milliseconds") ?? to_unix_timestamp(now(), unit: "milliseconds")
+
+    .class_uid    = 4003
+    .category_uid = 4
+    .severity_id  = 1
+    .activity_id  = 1
+    .time         = ts
+
+    .query = {
+      "hostname": qname,
+      "type":     qtype,
+      "class":    qclass
+    }
+
+    .src_endpoint = {
+      "ip": to_string!(parsed.client)
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "Unbound",
+        "vendor_name": "NLnet Labs"
+      },
+      "version": "1.0.0"
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp!(now(), unit: "milliseconds")
+  }
+
+  # Ligne brute complete (header syslog + payload unbound) + identifiant unique
+  _ts   = to_string(.timestamp) ?? ""
+  _host = string(.hostname)     ?? ""
+  _app  = string(.appname)      ?? ""
+  .raw  = _ts + " " + _host + " " + _app + ": " + raw_msg
+  .uid  = uuid_v4()
+
+  del(.message)
+  del(.timestamp)
+  del(.hostname)
+  del(.appname)
+  del(.facility)
+  del(.severity)
+  del(.procid)
+  del(.msgid)
+  del(.version)
+  del(.source_type)
+'''
+
+# --- FILTER : drop malformed ---
+[transforms.unbound_filter_valid]
+type      = "filter"
+inputs    = ["unbound_parse_and_normalize"]
+condition = '.class_uid == 4003'
+
+# --- TRANSFORM : extraction pour raw-logs ---
+[transforms.unbound_raw_only]
+type   = "remap"
+inputs = ["unbound_filter_valid"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "raw":           .raw
+  }
+'''
+
+# --- SINK : Quickwit OCSF ---
+[sinks.unbound_quickwit]
+type                = "http"
+inputs              = ["unbound_filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-dns/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.unbound_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs ---
+[sinks.unbound_quickwit_raw]
+type                = "http"
+inputs              = ["unbound_raw_only"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.unbound_quickwit_raw.request]
+headers.Content-Type = "application/x-ndjson"

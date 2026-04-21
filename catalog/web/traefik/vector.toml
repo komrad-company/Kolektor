@@ -1,0 +1,175 @@
+# ==============================================================================
+# Traefik — access log JSON
+# OCSF Class : 4002 (HTTP Activity)
+# Input      : File (JSON per line)
+# Tested with: Traefik v2.11 / v3.x (access log format=json)
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.traefik_input]
+type    = "file"
+include = ["${TRAEFIK_ACCESS_LOG:-/var/log/traefik/access.log}"]
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.traefik_parse_and_normalize]
+type   = "remap"
+inputs = ["traefik_input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  raw_msg = string!(.message)
+  parsed = parse_json(raw_msg) ?? null
+  valid = is_object(parsed)
+
+  if valid {
+    # Injecter les cles JSON a la racine pour acceder aux champs avec tirets via la syntaxe path VRL (ex: ."request_User-Agent")
+    . = merge(., object!(parsed))
+
+    # exists() obligatoire : to_string(null) renvoie "" en VRL, pas null
+    method      = if exists(.RequestMethod)       { to_string(.RequestMethod)       ?? null } else { null }
+    path        = if exists(.RequestPath)         { to_string(.RequestPath)         ?? null } else { null }
+    proto       = if exists(.RequestProtocol)     { to_string(.RequestProtocol)     ?? null } else { null }
+    host        = if exists(.RequestHost)         { to_string(.RequestHost)         ?? null } else { null }
+    scheme      = if exists(.RequestScheme)       { to_string(.RequestScheme)       ?? "http" } else { "http" }
+    status_code = if exists(.DownstreamStatus)    { to_int(.DownstreamStatus)       ?? 0 } else { 0 }
+    bytes_out   = if exists(.DownstreamContentSize) { to_int(.DownstreamContentSize) ?? 0 } else { 0 }
+    bytes_in    = if exists(.RequestContentSize)  { to_int(.RequestContentSize)     ?? 0 } else { 0 }
+    client_ip   = if exists(.ClientHost)          { to_string(.ClientHost)          ?? null } else { null }
+    client_user = if exists(.ClientUsername)      { to_string(.ClientUsername)      ?? null } else { null }
+    user_agent  = if exists(."request_User-Agent") { to_string(."request_User-Agent") ?? null } else { null }
+    referer     = if exists(."request_Referer")   { to_string(."request_Referer")   ?? null } else { null }
+    duration_ns = if exists(.Duration)            { to_int(.Duration)               ?? 0 } else { 0 }
+    router      = if exists(.RouterName)          { to_string(.RouterName)          ?? null } else { null }
+    service     = if exists(.ServiceName)         { to_string(.ServiceName)         ?? null } else { null }
+
+    # Timestamp : ISO 8601
+    ts_str_raw = if exists(.StartUTC) { to_string(.StartUTC) ?? "" } else if exists(.time) { to_string(.time) ?? "" } else { "" }
+    parsed_ts = parse_timestamp(ts_str_raw, format: "%+") ?? null
+    ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp!(now(), unit: "milliseconds") }
+
+    # Severity selon status HTTP
+    ocsf_severity = if status_code >= 500 { 4 } else if status_code >= 400 { 2 } else { 1 }
+
+    # Pre-calcul (VRL interdit les if dans les object literals)
+    referrer_value = if referer != null && referer != "-" && referer != "" { referer } else { null }
+    actor_name = if client_user != null && client_user != "-" && client_user != "" { client_user } else { null }
+
+    .class_uid    = 4002
+    .category_uid = 4
+    .severity_id  = ocsf_severity
+    .time         = ts
+
+    .http_request = {
+      "http_method": method,
+      "url": {
+        "path":     path,
+        "hostname": host,
+        "scheme":   scheme
+      },
+      "version":    proto,
+      "referrer":   referrer_value,
+      "user_agent": user_agent
+    }
+
+    .http_response = {
+      "code": status_code
+    }
+
+    .src_endpoint = {
+      "ip": client_ip
+    }
+
+    .actor = {
+      "user": {
+        "name": actor_name
+      }
+    }
+
+    .traffic = {
+      "bytes_in":  bytes_in,
+      "bytes_out": bytes_out
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "Traefik",
+        "vendor_name": "Traefik Labs"
+      },
+      "version": "1.0.0"
+    }
+
+    .unmapped = {
+      "router_name":  router,
+      "service_name": service,
+      "duration_ns":  duration_ns
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp!(now(), unit: "milliseconds")
+  }
+
+  .raw = raw_msg
+
+  # Nettoyer les cles brutes Traefik injectees par merge()
+  del(.ClientAddr)
+  del(.ClientHost)
+  del(.ClientPort)
+  del(.ClientUsername)
+  del(.DownstreamContentSize)
+  del(.DownstreamStatus)
+  del(.Duration)
+  del(.OriginContentSize)
+  del(.OriginDuration)
+  del(.OriginStatus)
+  del(.Overhead)
+  del(.RequestAddr)
+  del(.RequestContentSize)
+  del(.RequestHost)
+  del(.RequestMethod)
+  del(.RequestPath)
+  del(.RequestPort)
+  del(.RequestProtocol)
+  del(.RequestScheme)
+  del(.RetryAttempts)
+  del(.RouterName)
+  del(.ServiceAddr)
+  del(.ServiceName)
+  del(.ServiceURL)
+  del(.StartLocal)
+  del(.StartUTC)
+  del(.TLSCipher)
+  del(.TLSVersion)
+  del(.entryPointName)
+  del(.level)
+  del(.msg)
+  del(."request_User-Agent")
+  del(."request_Referer")
+  del(."downstream_Content-Type")
+  del(.message)
+  del(.file)
+  del(.host)
+  del(.source_type)
+'''
+
+# --- FILTER : drop malformed ---
+[transforms.traefik_filter_valid]
+type      = "filter"
+inputs    = ["traefik_parse_and_normalize"]
+condition = '.class_uid == 4002'
+
+# --- SINK : Quickwit ---
+[sinks.traefik_quickwit]
+type                = "http"
+inputs              = ["traefik_filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-http/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.traefik_quickwit.request]
+headers.Content-Type = "application/x-ndjson"

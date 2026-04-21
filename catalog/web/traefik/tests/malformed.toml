@@ -1,0 +1,21 @@
+[[tests]]
+name = "traefik — input non-JSON (malformed)"
+
+[[tests.inputs]]
+insert_at = "traefik_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = "this is not json at all"
+
+[[tests.outputs]]
+extract_from = "traefik_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.category_uid, 0)
+  assert_eq!(.severity_id, 0)
+  assert_eq!(.raw, "this is not json at all")
+'''

@@ -1,0 +1,216 @@
+# ==============================================================================
+# Kubernetes Audit Log — JSON (audit.k8s.io/v1)
+# OCSF Class : 6003 (API Activity)
+# Input      : File (JSON per line, kube-apiserver --audit-log-path)
+# Tested with: Kubernetes 1.28 - 1.31, audit policy level >= Metadata
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.k8s_audit_input]
+type    = "file"
+include = ["${K8S_AUDIT_LOG:-/var/log/kubernetes/audit.log}"]
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.k8s_audit_parse_and_normalize]
+type   = "remap"
+inputs = ["k8s_audit_input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  raw_msg = string!(.message)
+  event = parse_json(raw_msg) ?? null
+  valid = is_object(event) && (to_string(get(object!(event), ["kind"]) ?? "") ?? "") == "Event"
+
+  if valid {
+    ev = object!(event)
+
+    # Helpers : null si champ absent ou string vide (OCSF preferre null a "")
+    verb_raw = get(ev, ["verb"]) ?? null
+    verb = if verb_raw != null { to_string(verb_raw) ?? "" } else { "" }
+
+    uri_raw = get(ev, ["requestURI"]) ?? null
+    request_uri = if uri_raw != null { to_string(uri_raw) ?? "" } else { "" }
+
+    aid_raw = get(ev, ["auditID"]) ?? null
+    audit_id = if aid_raw != null { s = to_string(aid_raw) ?? ""; if s != "" { s } else { null } } else { null }
+
+    stage_raw = get(ev, ["stage"]) ?? null
+    stage = if stage_raw != null { s = to_string(stage_raw) ?? ""; if s != "" { s } else { null } } else { null }
+
+    level_raw = get(ev, ["level"]) ?? null
+    level = if level_raw != null { s = to_string(level_raw) ?? ""; if s != "" { s } else { null } } else { null }
+
+    ua_raw = get(ev, ["userAgent"]) ?? null
+    user_agent_str = if ua_raw != null { s = to_string(ua_raw) ?? ""; if s != "" { s } else { null } } else { null }
+
+    # User identity
+    user_obj = object(get(ev, ["user"]) ?? {}) ?? {}
+    un_raw = get(user_obj, ["username"]) ?? null
+    user_name = if un_raw != null { s = to_string(un_raw) ?? ""; if s != "" { s } else { null } } else { null }
+    uu_raw = get(user_obj, ["uid"]) ?? null
+    user_uid = if uu_raw != null { s = to_string(uu_raw) ?? ""; if s != "" { s } else { null } } else { null }
+
+    # Source IPs (array) : on prend la 1ere
+    source_ips = array(get(ev, ["sourceIPs"]) ?? []) ?? []
+    src_ip = if length(source_ips) > 0 { s = to_string(source_ips[0]) ?? ""; if s != "" { s } else { null } } else { null }
+
+    # objectRef : cible de l'operation
+    obj_ref = object(get(ev, ["objectRef"]) ?? {}) ?? {}
+    tr_raw = get(obj_ref, ["resource"]) ?? null
+    target_resource = if tr_raw != null { s = to_string(tr_raw) ?? ""; if s != "" { s } else { null } } else { null }
+    tn_raw = get(obj_ref, ["namespace"]) ?? null
+    target_namespace = if tn_raw != null { s = to_string(tn_raw) ?? ""; if s != "" { s } else { null } } else { null }
+    tname_raw = get(obj_ref, ["name"]) ?? null
+    target_name = if tname_raw != null { s = to_string(tname_raw) ?? ""; if s != "" { s } else { null } } else { null }
+    tg_raw = get(obj_ref, ["apiGroup"]) ?? null
+    target_api_group = if tg_raw != null { s = to_string(tg_raw) ?? ""; if s != "" { s } else { null } } else { null }
+    tv_raw = get(obj_ref, ["apiVersion"]) ?? null
+    target_api_version = if tv_raw != null { s = to_string(tv_raw) ?? ""; if s != "" { s } else { null } } else { null }
+
+    # responseStatus : code + message
+    resp = object(get(ev, ["responseStatus"]) ?? {}) ?? {}
+    resp_code = to_int(get(resp, ["code"]) ?? 0) ?? 0
+    rr_raw = get(resp, ["reason"]) ?? null
+    resp_reason = if rr_raw != null { s = to_string(rr_raw) ?? ""; if s != "" { s } else { null } } else { null }
+
+    # annotations (authorization decision)
+    annotations = object(get(ev, ["annotations"]) ?? {}) ?? {}
+    az_raw = get(annotations, ["authorization.k8s.io/decision"]) ?? null
+    authz_decision = if az_raw != null { s = to_string(az_raw) ?? ""; if s != "" { s } else { null } } else { null }
+
+    is_failure = resp_code >= 400
+    status = if is_failure { "Failure" } else { "Success" }
+    status_id = if is_failure { 2 } else { 1 }
+    ocsf_severity = if resp_code >= 500 { 4 } else if resp_code >= 400 { 3 } else { 1 }
+
+    # activity_id OCSF : Create=1, Read=2, Update=3, Delete=4, Other=99
+    activity_id = if verb == "create" || verb == "post" { 1 } else if verb == "get" || verb == "list" || verb == "watch" { 2 } else if verb == "update" || verb == "patch" || verb == "put" { 3 } else if verb == "delete" || verb == "deletecollection" { 4 } else { 99 }
+
+    # Timestamp : stageTimestamp priorise (fin de requete)
+    ts_str_raw = to_string(get(ev, ["stageTimestamp"]) ?? "") ?? ""
+    if ts_str_raw == "" {
+      ts_str_raw = to_string(get(ev, ["requestReceivedTimestamp"]) ?? "") ?? ""
+    }
+    parsed_ts = parse_timestamp(ts_str_raw, format: "%+") ?? null
+    ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp!(now(), unit: "milliseconds") }
+
+    .class_uid    = 6003
+    .category_uid = 6
+    .severity_id  = ocsf_severity
+    .activity_id  = activity_id
+    .time         = ts
+    .status       = status
+    .status_id    = status_id
+
+    .api = {
+      "operation": verb,
+      "service": { "name": "kube-apiserver" },
+      "request":  { "uid": audit_id, "uri": request_uri },
+      "response": { "code": resp_code, "message": resp_reason }
+    }
+
+    .actor = {
+      "user": {
+        "name": user_name,
+        "uid":  user_uid
+      }
+    }
+
+    .src_endpoint = {
+      "ip": src_ip
+    }
+
+    .http_request = {
+      "user_agent": user_agent_str
+    }
+
+    .resources = [{
+      "type":      target_resource,
+      "name":      target_name,
+      "namespace": target_namespace,
+      "group":     target_api_group,
+      "version":   target_api_version
+    }]
+
+    .cloud = {
+      "provider": "Kubernetes"
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "Kubernetes",
+        "vendor_name": "CNCF"
+      },
+      "version": "1.0.0",
+      "uid":     audit_id
+    }
+
+    .unmapped = {
+      "audit_stage":           stage,
+      "audit_level":           level,
+      "authorization_decision": authz_decision
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp!(now(), unit: "milliseconds")
+  }
+
+  .raw = raw_msg
+  .uid = uuid_v4()
+
+  del(.message)
+  del(.file)
+  del(.host)
+  del(.source_type)
+'''
+
+# --- FILTER : drop malformed ---
+[transforms.k8s_audit_filter_valid]
+type      = "filter"
+inputs    = ["k8s_audit_parse_and_normalize"]
+condition = '.class_uid == 6003'
+
+# --- TRANSFORM : extraction pour raw-logs ---
+[transforms.k8s_audit_raw_only]
+type   = "remap"
+inputs = ["k8s_audit_filter_valid"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "raw":           .raw
+  }
+'''
+
+# --- SINK : Quickwit OCSF ---
+[sinks.k8s_audit_quickwit]
+type                = "http"
+inputs              = ["k8s_audit_filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-k8s/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.k8s_audit_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs ---
+[sinks.k8s_audit_quickwit_raw]
+type                = "http"
+inputs              = ["k8s_audit_raw_only"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.k8s_audit_quickwit_raw.request]
+headers.Content-Type = "application/x-ndjson"
