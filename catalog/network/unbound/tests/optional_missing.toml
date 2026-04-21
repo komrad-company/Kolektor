@@ -1,0 +1,29 @@
+[[tests]]
+name = "unbound — query AAAA IPv6, prefix info: seul"
+
+[[tests.inputs]]
+insert_at = "unbound_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = "info: fe80::1 ipv6.google.com. AAAA IN"
+  timestamp = "2024-04-14T10:24:00Z"
+  hostname  = "opnsense.lan"
+  appname   = "unbound"
+  facility  = "local7"
+  severity  = "6"
+
+[[tests.outputs]]
+extract_from = "unbound_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4003)
+  assert_eq!(.query.hostname, "ipv6.google.com")
+  assert_eq!(.query.type, "AAAA")
+  assert_eq!(.query.class, "IN")
+  assert_eq!(.src_endpoint.ip, "fe80::1")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

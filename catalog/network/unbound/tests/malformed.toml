@@ -1,0 +1,26 @@
+[[tests]]
+name = "unbound — ligne resolving non parsable (malformed)"
+
+[[tests.inputs]]
+insert_at = "unbound_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = "[1713091425] unbound[12345:0] info: resolving example.com. A IN"
+  timestamp = "2024-04-14T10:23:46Z"
+  hostname  = "opnsense.lan"
+  appname   = "unbound"
+  facility  = "local7"
+  severity  = "6"
+
+[[tests.outputs]]
+extract_from = "unbound_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.category_uid, 0)
+  assert_eq!(.severity_id, 0)
+  assert!(exists(.raw))
+'''

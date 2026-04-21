@@ -109,7 +109,10 @@ fn parse_parser_dir(
 fn ocsf_index_for(class_uid: Option<i32>) -> Option<String> {
     match class_uid? {
         4001 => Some("ocsf-network".into()),
+        4002 => Some("ocsf-http".into()),
+        4003 => Some("ocsf-dns".into()),
         6001 => Some("ocsf-audit".into()),
+        6003 => Some("ocsf-k8s".into()),
         3001 | 3002 => Some("ocsf-identity".into()),
         1001 | 1003 | 2001 => Some("ocsf-endpoint".into()),
         _ => None,

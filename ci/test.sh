@@ -10,6 +10,8 @@ export LISTEN_PORT="5140"
 export AUTH_LOG_PATH="/dev/null"
 export AUDIT_LOG_PATH="/dev/null"
 export NGINX_ACCESS_LOG="/dev/null"
+export TRAEFIK_ACCESS_LOG="/dev/null"
+export K8S_AUDIT_LOG="/dev/null"
 
 RESULTS_DIR="ci/results"
 mkdir -p "$RESULTS_DIR"
