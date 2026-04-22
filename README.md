@@ -36,7 +36,8 @@ kolektor/
 ├── catalog/                # Toutes les configs Vector par categorie
 │   ├── network/            # Firewalls, NDR → OCSF 4001 Network Activity
 │   │   ├── opnsense/       #   filterlog CSV via syslog
-│   │   └── fortinet-fortigate/ # key=value via syslog
+│   │   ├── fortinet-fortigate/ # key=value via syslog
+│   │   └── suricata-eve/   #   EVE JSON alert/dns/http/flow
 │   │
 │   ├── endpoint/           # EDR → OCSF 1003 Process / 2001 Finding
 │   │   └── crowdstrike-falcon/ # JSON via SIEM Connector syslog
@@ -127,10 +128,10 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 
 | Index            | Classe OCSF                | category_uid | Sources typiques               |
 |------------------|----------------------------|--------------|--------------------------------|
-| `ocsf-network`   | 4001 Network Activity      | 4            | opnsense, fortigate            |
-| `ocsf-http`      | 4002 HTTP Activity         | 4            | nginx, traefik                 |
-| `ocsf-dns`       | 4003 DNS Activity          | 4            | unbound, sysmon DNS            |
-| `ocsf-endpoint`  | 1001/1003 File/Process     | 1            | crowdstrike, sysmon, auditd    |
+| `ocsf-network`   | 4001 Network Activity      | 4            | opnsense, fortigate, suricata flow |
+| `ocsf-http`      | 4002 HTTP Activity         | 4            | nginx, traefik, suricata HTTP  |
+| `ocsf-dns`       | 4003 DNS Activity          | 4            | unbound, sysmon DNS, suricata DNS |
+| `ocsf-endpoint`  | 1001/1003 File/Process     | 1            | crowdstrike, sysmon, auditd, suricata alerts |
 | `ocsf-identity`  | 3001/3002 Account/Auth     | 3            | windows-evtx, auth-log         |
 | `ocsf-audit`     | 6001 API Activity          | 6            | cloudtrail, syslog             |
 | `ocsf-k8s`       | 6003 Kubernetes API Activity | 6          | kubernetes-audit               |
