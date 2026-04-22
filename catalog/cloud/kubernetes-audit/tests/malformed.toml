@@ -19,3 +19,15 @@ source = '''
   assert_eq!(.severity_id, 0)
   assert_eq!(.raw, "not a json line at all — should be dropped")
 '''
+
+[[tests.outputs]]
+extract_from = "k8s_audit_raw_only"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "cloud/kubernetes-audit")
+  assert_eq!(.parse_error, "kubernetes_audit_json_invalid")
+  assert_eq!(.raw, "not a json line at all — should be dropped")
+'''

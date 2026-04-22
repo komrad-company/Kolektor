@@ -43,6 +43,30 @@
         "tokenizer": "raw"
       },
       {
+        "name": "source_type",
+        "type": "text",
+        "fast": true,
+        "tokenizer": "raw"
+      },
+      {
+        "name": "parser",
+        "type": "text",
+        "fast": true,
+        "tokenizer": "raw"
+      },
+      {
+        "name": "parse_status",
+        "type": "text",
+        "fast": true,
+        "tokenizer": "raw"
+      },
+      {
+        "name": "parse_error",
+        "type": "text",
+        "fast": true,
+        "tokenizer": "raw"
+      },
+      {
         "name": "raw",
         "type": "text",
         "stored": true,
@@ -55,6 +79,9 @@
     "default_search_fields": [
       "tenant_id",
       "datasource_id",
+      "source_type",
+      "parser",
+      "parse_error",
       "raw"
     ]
   }

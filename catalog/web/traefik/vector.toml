@@ -113,6 +113,7 @@ source = '''
   }
 
   .raw = raw_msg
+  .uid = uuid_v4()
 
   # Nettoyer les cles brutes Traefik injectees par merge()
   del(.ClientAddr)
@@ -161,6 +162,29 @@ type      = "filter"
 inputs    = ["traefik_parse_and_normalize"]
 condition = '.class_uid == 4002'
 
+[transforms.traefik_filter_failed]
+type      = "filter"
+inputs    = ["traefik_parse_and_normalize"]
+condition = '.class_uid != 4002'
+
+[transforms.traefik_raw_failed]
+type   = "remap"
+inputs = ["traefik_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "web/traefik",
+    "parser":        "traefik",
+    "parse_status":  "failed",
+    "parse_error":   "traefik_json_invalid",
+    "raw":           .raw
+  }
+'''
+
 # --- SINK : Quickwit ---
 [sinks.traefik_quickwit]
 type                = "http"
@@ -172,4 +196,17 @@ batch.max_events    = 1000
 batch.timeout_secs  = 5
 
 [sinks.traefik_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.traefik_quickwit_raw_failed]
+type                = "http"
+inputs              = ["traefik_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.traefik_quickwit_raw_failed.request]
 headers.Content-Type = "application/x-ndjson"

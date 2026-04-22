@@ -17,3 +17,16 @@ type   = "vrl"
 source = '''
   assert_eq!(.class_uid, 0)
 '''
+
+[[tests.outputs]]
+extract_from = "cloudtrail_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "cloud/aws-cloudtrail")
+  assert_eq!(.parse_error, "cloudtrail_event_name_missing")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

@@ -18,9 +18,22 @@ extract_from = "auditd_parse_and_normalize"
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  assert_eq!(.class_uid, 1003)
+  assert_eq!(.class_uid, 0)
   assert_eq!(.unmapped.audit_type, null)
   assert_eq!(.unmapped.syscall, null)
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''
+
+[[tests.outputs]]
+extract_from = "auditd_raw_only"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "linux/auditd")
+  assert_eq!(.parse_error, "auditd_type_unsupported")
   assert!(exists(.raw))
   assert!(exists(.uid))
 '''

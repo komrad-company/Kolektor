@@ -174,10 +174,15 @@ type      = "filter"
 inputs    = ["k8s_audit_parse_and_normalize"]
 condition = '.class_uid == 6003'
 
-# --- TRANSFORM : extraction pour raw-logs ---
+[transforms.k8s_audit_filter_failed]
+type      = "filter"
+inputs    = ["k8s_audit_parse_and_normalize"]
+condition = '.class_uid != 6003'
+
+# --- TRANSFORM : extraction des echecs pour raw-logs ---
 [transforms.k8s_audit_raw_only]
 type   = "remap"
-inputs = ["k8s_audit_filter_valid"]
+inputs = ["k8s_audit_filter_failed"]
 source = '''
   . = {
     "uid":           .uid,
@@ -185,6 +190,10 @@ source = '''
     "received_time": .received_time,
     "tenant_id":     .tenant_id,
     "datasource_id": .datasource_id,
+    "source_type":   "cloud/kubernetes-audit",
+    "parser":        "k8s_audit",
+    "parse_status":  "failed",
+    "parse_error":   "kubernetes_audit_json_invalid",
     "raw":           .raw
   }
 '''

@@ -4,7 +4,7 @@ use axum::{
 };
 use kolektor_common::models::Parser;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::config_writer;
@@ -29,6 +29,7 @@ pub struct ParserSummary {
     pub ocsf_class_uid: Option<i32>,
     pub ocsf_category_uid: Option<i32>,
     pub ocsf_index: Option<String>,
+    pub ocsf_outputs: Value,
     pub description: Option<String>,
     pub built_in: bool,
     pub enabled: bool,
@@ -46,6 +47,7 @@ impl From<&Parser> for ParserSummary {
             ocsf_class_uid: p.ocsf_class_uid,
             ocsf_category_uid: p.ocsf_category_uid,
             ocsf_index: p.ocsf_index.clone(),
+            ocsf_outputs: p.ocsf_outputs.clone(),
             description: p.description.clone(),
             built_in: p.built_in,
             enabled: p.enabled,

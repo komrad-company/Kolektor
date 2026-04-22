@@ -71,7 +71,7 @@ catalog/<category>/<source>/
 ├── tests/
 │   ├── nominal.toml        # Event standard, tous champs presents
 │   ├── edge_case.toml      # Champs optionnels manquants ou valeurs limites
-│   └── malformed.toml      # Input invalide → droppe proprement
+│   └── malformed.toml      # Input invalide → raw-logs avec parse_status=failed
 └── README.md               # Doc : format, config source, mapping OCSF, liens
 ```
 
@@ -127,8 +127,8 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 
 | Index            | Classe OCSF                | category_uid | Sources typiques               |
 |------------------|----------------------------|--------------|--------------------------------|
-| `ocsf-network`   | 4001 Network Activity      | 4            | opnsense, fortigate, nginx     |
-| `ocsf-http`      | 4002 HTTP Activity         | 4            | traefik                        |
+| `ocsf-network`   | 4001 Network Activity      | 4            | opnsense, fortigate            |
+| `ocsf-http`      | 4002 HTTP Activity         | 4            | nginx, traefik                 |
 | `ocsf-dns`       | 4003 DNS Activity          | 4            | unbound, sysmon DNS            |
 | `ocsf-endpoint`  | 1001/1003 File/Process     | 1            | crowdstrike, sysmon, auditd    |
 | `ocsf-identity`  | 3001/3002 Account/Auth     | 3            | windows-evtx, auth-log         |
@@ -153,5 +153,11 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 4. Ajouter un `README.md` documentant la source
 5. `ci/validate.sh` + `ci/test.sh` pour valider localement
 6. Push → CI valide automatiquement
+
+### Convention raw / parsing
+
+- Un evenement parse va dans son index OCSF et conserve toujours le log source dans le champ `raw`.
+- Un evenement non parse ne va pas dans un index OCSF : il est envoye dans `raw-logs` avec `parse_status = "failed"`, `source_type`, `parser`, `parse_error`, `raw`, `uid`, `tenant_id` et `datasource_id`.
+- Les parsers multi-classes declarent leurs sorties dans `manifest.yaml` via `ocsf_outputs`, et routent chaque classe vers son index Quickwit.
 
 Voir `_schema/README.md` pour le guide complet.

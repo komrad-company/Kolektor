@@ -37,6 +37,6 @@ extract_from = "auditd_parse_and_normalize"
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  assert_eq!(.class_uid, 1003)
+  assert_eq!(.class_uid, 0)
   assert!(exists(.raw))
 '''

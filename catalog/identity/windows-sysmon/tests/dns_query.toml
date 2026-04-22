@@ -29,6 +29,8 @@ source = '''
   assert_eq!(.class_uid, 4003)
   assert_eq!(.category_uid, 4)
   assert_eq!(.query.hostname, "malware-c2.evil.com")
+  assert_eq!(.query.type, "5")
+  assert_eq!(.unmapped.query_results, "type:  5 c2-server.evil.com;::ffff:93.184.216.34;")
   assert_eq!(.unmapped.event_id, 22)
 '''
 
