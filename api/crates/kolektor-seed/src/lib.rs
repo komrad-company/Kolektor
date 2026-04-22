@@ -150,21 +150,18 @@ fn normalized_outputs(manifest: &Manifest) -> Vec<OcsfOutput> {
 }
 
 fn primary_output(manifest: &Manifest, outputs: &[OcsfOutput]) -> Option<OcsfOutput> {
-    if let (Some(class_uid), Some(category_uid)) =
-        (manifest.ocsf_class_uid, manifest.ocsf_category_uid)
-    {
-        if class_uid > 0 && category_uid > 0 {
+    match (manifest.ocsf_class_uid, manifest.ocsf_category_uid) {
+        (Some(class_uid), Some(category_uid)) if class_uid > 0 && category_uid > 0 => {
             let index = ocsf_index_for(Some(class_uid))?;
-            return Some(OcsfOutput {
+            Some(OcsfOutput {
                 class_uid,
                 category_uid,
                 index,
                 route: None,
-            });
+            })
         }
+        _ => outputs.first().cloned(),
     }
-
-    outputs.first().cloned()
 }
 
 fn ocsf_index_for(class_uid: Option<i32>) -> Option<String> {
