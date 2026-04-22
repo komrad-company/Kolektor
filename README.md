@@ -43,6 +43,7 @@ kolektor/
 │   │   └── crowdstrike-falcon/ # JSON via SIEM Connector syslog
 │   │
 │   ├── identity/           # IdP/AD → OCSF 3002 Auth / 3001 Account
+│   │   ├── microsoft-entra/       # Graph signIns/directoryAudits via fetcher
 │   │   ├── windows-security-evtx/ # Winlogbeat JSON (4624/4625/4688...)
 │   │   └── windows-sysmon/        # Winlogbeat JSON (events 1/3/7/11/22)
 │   │
@@ -52,7 +53,8 @@ kolektor/
 │   │   └── auth-log/       #   auth.log SSH/sudo/PAM → OCSF 3002
 │   │
 │   ├── cloud/              # Cloud providers → OCSF 6001 API Activity
-│   │   └── aws-cloudtrail/ # JSON via HTTP
+│   │   ├── aws-cloudtrail/ # JSON via HTTP
+│   │   └── microsoft-365-audit/ # Unified Audit JSONL via fetcher
 │   │
 │   └── web/                # Serveurs web / edge → OCSF 4002 HTTP Activity
 │       ├── nginx/          #   combined access log via file
@@ -134,8 +136,8 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 | `ocsf-http`      | 4002 HTTP Activity         | 4            | nginx, traefik, cloudflare, suricata HTTP |
 | `ocsf-dns`       | 4003 DNS Activity          | 4            | unbound, sysmon DNS, suricata DNS |
 | `ocsf-endpoint`  | 1001/1003 File/Process     | 1            | crowdstrike, sysmon, auditd, suricata alerts |
-| `ocsf-identity`  | 3001/3002 Account/Auth     | 3            | windows-evtx, auth-log         |
-| `ocsf-audit`     | 6001 API Activity          | 6            | cloudtrail, syslog             |
+| `ocsf-identity`  | 3001/3002 Account/Auth     | 3            | entra sign-ins, windows-evtx, auth-log |
+| `ocsf-audit`     | 6001 API Activity          | 6            | cloudtrail, m365 audit, entra directory audits, syslog |
 | `ocsf-k8s`       | 6003 Kubernetes API Activity | 6          | kubernetes-audit               |
 
 ## CI Pipeline
@@ -168,5 +170,7 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 - Le parser Vector ne porte que la normalisation : format brut canonique en entree, enrichissement minimal, mapping OCSF, routage Quickwit.
 - La recuperation des logs cloud/SaaS est la responsabilite d'un collecteur : API pull avec curseur, object storage + queue, Event Hub/EventBridge, ou Logpush HTTP quand le fournisseur sait pousser.
 - Pour les sources cloud, le format canonique recommande est JSON line-delimited. Le meme parser doit pouvoir traiter les lignes issues d'un collecteur API ou d'un export pousse si le schema source reste identique.
+
+Voir `docs/FETCHERS.md` pour la configuration des fetchers pull.
 
 Voir `_schema/README.md` pour le guide complet.

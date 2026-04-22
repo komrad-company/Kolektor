@@ -13,18 +13,21 @@ RUN apt-get update \
 COPY api/Cargo.toml api/Cargo.lock* api/rust-toolchain.toml ./
 COPY api/crates/kolektor-api/Cargo.toml    crates/kolektor-api/Cargo.toml
 COPY api/crates/kolektor-common/Cargo.toml crates/kolektor-common/Cargo.toml
+COPY api/crates/kolektor-fetcher/Cargo.toml crates/kolektor-fetcher/Cargo.toml
 COPY api/crates/kolektor-seed/Cargo.toml   crates/kolektor-seed/Cargo.toml
-RUN mkdir -p crates/kolektor-api/src crates/kolektor-common/src crates/kolektor-seed/src \
+RUN mkdir -p crates/kolektor-api/src crates/kolektor-common/src crates/kolektor-fetcher/src crates/kolektor-seed/src \
  && echo 'fn main(){}' > crates/kolektor-api/src/main.rs \
+ && echo 'fn main(){}' > crates/kolektor-fetcher/src/main.rs \
  && echo ''           > crates/kolektor-common/src/lib.rs \
  && echo ''           > crates/kolektor-seed/src/lib.rs
 RUN cargo build --release 2>/dev/null; \
-    rm -f target/release/kolektor-api target/release/deps/kolektor*
+    rm -f target/release/kolektor-api target/release/kolektor-fetcher target/release/deps/kolektor*
 
 # Build réel — le COPY des sources + touch force le rebuild des crates internes
 COPY api/crates/ ./crates/
 COPY api/migrations/ ./migrations/
 RUN touch crates/kolektor-api/src/main.rs \
+         crates/kolektor-fetcher/src/main.rs \
          crates/kolektor-common/src/lib.rs \
          crates/kolektor-seed/src/lib.rs \
  && cargo build --release
@@ -48,6 +51,7 @@ COPY catalog/ /etc/vector/catalog/
 
 # Binaire Rust + migrations sqlx
 COPY --from=builder /app/target/release/kolektor-api /usr/local/bin/kolektor-api
+COPY --from=builder /app/target/release/kolektor-fetcher /usr/local/bin/kolektor-fetcher
 COPY --from=builder /app/migrations /etc/kolektor/migrations
 
 # Entrypoint legacy conservé en fallback pour deployments mono-source

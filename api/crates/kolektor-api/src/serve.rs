@@ -30,6 +30,17 @@ pub async fn run(args: ServeArgs) -> Result<()> {
 
     let authed = Router::new()
         .route("/status", get(routes::status::get_status))
+        .route(
+            "/fetchers",
+            get(routes::fetchers::list).post(routes::fetchers::create),
+        )
+        .route(
+            "/fetchers/:id",
+            get(routes::fetchers::get_one)
+                .put(routes::fetchers::update)
+                .delete(routes::fetchers::delete_one),
+        )
+        .route("/fetchers/:id/enabled", put(routes::fetchers::put_enabled))
         .route("/parsers", get(routes::parsers::list))
         .route("/parsers/:category/:name", get(routes::parsers::get_one))
         .route(

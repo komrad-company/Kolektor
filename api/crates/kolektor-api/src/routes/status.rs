@@ -9,6 +9,8 @@ use crate::state::AppState;
 pub struct StatusResponse {
     pub parsers_total: i64,
     pub parsers_enabled: i64,
+    pub fetchers_total: i64,
+    pub fetchers_enabled: i64,
     pub last_reload_at: Option<DateTime<Utc>>,
     pub datasource_base: String,
     pub vector_output: String,
@@ -32,9 +34,20 @@ pub async fn get_status(State(state): State<AppState>) -> Result<Json<StatusResp
     .await?
     .flatten();
 
+    let fetchers_total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM kolektor.fetchers")
+        .fetch_one(&state.pool)
+        .await?;
+
+    let fetchers_enabled: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM kolektor.fetchers WHERE enabled = true")
+            .fetch_one(&state.pool)
+            .await?;
+
     Ok(Json(StatusResponse {
         parsers_total: total,
         parsers_enabled: enabled,
+        fetchers_total,
+        fetchers_enabled,
         last_reload_at: last_reload,
         datasource_base: state.datasource_base.clone(),
         vector_output: state.vector_output.display().to_string(),

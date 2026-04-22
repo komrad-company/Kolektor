@@ -1,0 +1,24 @@
+[[tests]]
+name = "Microsoft 365 Audit — SharePoint file event"
+
+[[tests.inputs]]
+insert_at = "microsoft365_audit_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"CreationTime":"2026-04-22T10:02:00Z","Id":"m365-2","Operation":"FileDownloaded","Workload":"SharePoint","UserId":"alice@example.com","UserKey":"user-key","ClientIP":"198.51.100.11","ResultStatus":"Success","RecordType":6,"ObjectId":"https://contoso.sharepoint.com/sites/sec/report.docx","ClientInfoString":"Mozilla/5.0","UserAgent":"Mozilla/5.0"}'
+
+[[tests.outputs]]
+extract_from = "microsoft365_audit_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6001)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.api.operation, "FileDownloaded")
+  assert_eq!(.api.service.name, "SharePoint")
+  assert_eq!(.actor.user.name, "alice@example.com")
+  assert_eq!(.unmapped.record_type, 6)
+  assert_eq!(.unmapped.user_agent, "Mozilla/5.0")
+'''
