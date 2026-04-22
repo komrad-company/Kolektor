@@ -1,0 +1,68 @@
+[[tests]]
+name = "Cloudflare HTTP — malformed JSON"
+
+[[tests.inputs]]
+insert_at = "cloudflare_http_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = "not a json object"
+
+[[tests.outputs]]
+extract_from = "cloudflare_http_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.category_uid, 0)
+  assert_eq!(.severity_id, 0)
+  assert_eq!(.raw, "not a json object")
+  assert!(exists(.uid))
+'''
+
+[[tests.outputs]]
+extract_from = "cloudflare_http_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "web/cloudflare-http")
+  assert_eq!(.parser, "cloudflare-http")
+  assert_eq!(.parse_error, "cloudflare_http_json_or_required_fields_invalid")
+  assert_eq!(.raw, "not a json object")
+  assert!(exists(.uid))
+'''
+
+[[tests]]
+name = "Cloudflare HTTP — required fields missing"
+
+[[tests.inputs]]
+insert_at = "cloudflare_http_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"RayID":"missing-method","ClientIP":"203.0.113.50","EdgeResponseStatus":200}'
+
+[[tests.outputs]]
+extract_from = "cloudflare_http_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.category_uid, 0)
+  assert_eq!(.severity_id, 0)
+  assert_eq!(.raw, "{\"RayID\":\"missing-method\",\"ClientIP\":\"203.0.113.50\",\"EdgeResponseStatus\":200}")
+'''
+
+[[tests.outputs]]
+extract_from = "cloudflare_http_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.parse_error, "cloudflare_http_json_or_required_fields_invalid")
+'''

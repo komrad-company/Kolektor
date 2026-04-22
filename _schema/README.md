@@ -59,6 +59,20 @@ Chaque event normalise doit contenir :
 - Aucun evenement non parse ne doit etre envoye dans un index OCSF
 - Les champs OCSF dynamiques doivent etre routes vers l'index Quickwit qui correspond a leur `class_uid`
 
+## Convention collecteur / parser
+
+Kolektor separe la recuperation des logs et leur normalisation :
+
+- un **collecteur** recupere les logs depuis la source : syslog, fichier, API pull
+  avec curseur, object storage + queue, Event Hub/EventBridge, ou Logpush HTTP ;
+- un **parser** Vector transforme un format brut canonique en OCSF et route vers
+  les index Quickwit.
+
+Pour les sources cloud/SaaS, ne pas enfouir la pagination, OAuth, retry/backoff
+ou gestion de curseur dans le VRL. Preferer un collecteur dedie qui depose du
+JSON line-delimited ou pousse des objets JSON vers Vector. Le parser doit rester
+testable avec des fixtures brutes et reutilisable quel que soit le transport.
+
 ## Convention raw / OCSF / raw-logs
 
 Chaque evenement OCSF valide garde une copie du log source dans `.raw`.
