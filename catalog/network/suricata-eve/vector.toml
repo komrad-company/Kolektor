@@ -1,0 +1,284 @@
+# ==============================================================================
+# Suricata — EVE JSON
+# OCSF Classes: 2001 (Security Finding), 4001 (Network), 4002 (HTTP), 4003 (DNS)
+# Input       : File (JSON per line)
+# Tested with : Suricata 7.x EVE JSON
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.suricata_input]
+type    = "file"
+include = ["${SURICATA_EVE_LOG:-/var/log/suricata/eve.json}"]
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.suricata_parse_and_normalize]
+type   = "remap"
+inputs = ["suricata_input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  raw_msg = string!(.message)
+  parsed = parse_json(raw_msg) ?? null
+  valid_json = is_object(parsed)
+
+  if valid_json {
+    ev = object!(parsed)
+
+    event_type = to_string(get(ev, ["event_type"]) ?? "") ?? ""
+    valid = event_type == "alert" || event_type == "dns" || event_type == "http" || event_type == "flow" || event_type == "netflow" || event_type == "tls"
+
+    ts_str = to_string(get(ev, ["timestamp"]) ?? "") ?? ""
+    parsed_ts = parse_timestamp(ts_str, format: "%+") ?? parse_timestamp(ts_str, format: "%Y-%m-%dT%H:%M:%S%.f%z") ?? null
+    ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp!(now(), unit: "milliseconds") }
+
+    src_ip = to_string(get(ev, ["src_ip"]) ?? null) ?? null
+    dest_ip = to_string(get(ev, ["dest_ip"]) ?? null) ?? null
+    src_port_raw = get(ev, ["src_port"]) ?? null
+    dest_port_raw = get(ev, ["dest_port"]) ?? null
+    src_port = if src_port_raw != null { to_int(src_port_raw) ?? null } else { null }
+    dest_port = if dest_port_raw != null { to_int(dest_port_raw) ?? null } else { null }
+    proto = to_string(get(ev, ["proto"]) ?? null) ?? null
+    app_proto = to_string(get(ev, ["app_proto"]) ?? null) ?? null
+    flow_id = to_string(get(ev, ["flow_id"]) ?? null) ?? null
+
+    alert = object(get(ev, ["alert"]) ?? {}) ?? {}
+    dns = object(get(ev, ["dns"]) ?? {}) ?? {}
+    http = object(get(ev, ["http"]) ?? {}) ?? {}
+    tls = object(get(ev, ["tls"]) ?? {}) ?? {}
+    flow = object(get(ev, ["flow"]) ?? {}) ?? {}
+
+    alert_sev_raw = get(alert, ["severity"]) ?? null
+    alert_sev = if alert_sev_raw != null { to_int(alert_sev_raw) ?? null } else { null }
+    ocsf_severity = if event_type == "alert" {
+      if alert_sev == 1 { 4 } else if alert_sev == 2 { 3 } else if alert_sev == 3 { 2 } else { 1 }
+    } else {
+      1
+    }
+
+    class_uid = if !valid { 0 } else if event_type == "alert" { 2001 } else if event_type == "dns" { 4003 } else if event_type == "http" { 4002 } else { 4001 }
+    category_uid = if class_uid == 2001 { 2 } else if class_uid == 0 { 0 } else { 4 }
+    activity_id = if event_type == "dns" { 1 } else if event_type == "http" { 1 } else if event_type == "alert" { 1 } else { 1 }
+
+    .class_uid    = class_uid
+    .category_uid = category_uid
+    .severity_id  = if class_uid == 0 { 0 } else { ocsf_severity }
+    .activity_id  = activity_id
+    .time         = ts
+
+    .src_endpoint = {
+      "ip":   src_ip,
+      "port": src_port
+    }
+
+    .dst_endpoint = {
+      "ip":   dest_ip,
+      "port": dest_port
+    }
+
+    .connection_info = {
+      "protocol_name": proto,
+      "app_protocol":  app_proto
+    }
+
+    query_hostname = to_string(get(dns, ["rrname"]) ?? null) ?? null
+    query_type = to_string(get(dns, ["rrtype"]) ?? null) ?? null
+    query_rcode = to_string(get(dns, ["rcode"]) ?? null) ?? null
+    dns_answers = get(dns, ["answers"]) ?? null
+    .query = {
+      "hostname": query_hostname,
+      "type":     query_type,
+      "rcode":    query_rcode
+    }
+    .answers = dns_answers
+
+    http_method = to_string(get(http, ["http_method"]) ?? null) ?? null
+    http_host = to_string(get(http, ["hostname"]) ?? null) ?? null
+    http_url = to_string(get(http, ["url"]) ?? null) ?? null
+    http_status_raw = get(http, ["status"]) ?? null
+    http_status = if http_status_raw != null { to_int(http_status_raw) ?? null } else { null }
+    http_user_agent = to_string(get(http, ["http_user_agent"]) ?? null) ?? null
+    http_referrer = to_string(get(http, ["http_refer"]) ?? null) ?? null
+    http_protocol = to_string(get(http, ["protocol"]) ?? null) ?? null
+
+    .http_request = {
+      "http_method": http_method,
+      "url": {
+        "hostname": http_host,
+        "path":     http_url
+      },
+      "version":    http_protocol,
+      "user_agent": http_user_agent,
+      "referrer":   http_referrer
+    }
+
+    .http_response = {
+      "code": http_status
+    }
+
+    alert_signature = to_string(get(alert, ["signature"]) ?? null) ?? null
+    alert_signature_id = to_string(get(alert, ["signature_id"]) ?? null) ?? null
+    alert_category = to_string(get(alert, ["category"]) ?? null) ?? null
+    alert_action = to_string(get(alert, ["action"]) ?? null) ?? null
+
+    .finding_info = {
+      "title": alert_signature,
+      "uid":   alert_signature_id,
+      "types": [alert_category]
+    }
+
+    bytes_toserver_raw = get(flow, ["bytes_toserver"]) ?? null
+    bytes_toclient_raw = get(flow, ["bytes_toclient"]) ?? null
+    pkts_toserver_raw = get(flow, ["pkts_toserver"]) ?? null
+    pkts_toclient_raw = get(flow, ["pkts_toclient"]) ?? null
+    bytes_out = if bytes_toserver_raw != null { to_int(bytes_toserver_raw) ?? null } else { null }
+    bytes_in = if bytes_toclient_raw != null { to_int(bytes_toclient_raw) ?? null } else { null }
+    packets_out = if pkts_toserver_raw != null { to_int(pkts_toserver_raw) ?? null } else { null }
+    packets_in = if pkts_toclient_raw != null { to_int(pkts_toclient_raw) ?? null } else { null }
+
+    .traffic = {
+      "bytes_in":    bytes_in,
+      "bytes_out":   bytes_out,
+      "packets_in":  packets_in,
+      "packets_out": packets_out
+    }
+
+    .tls = {
+      "sni":     to_string(get(tls, ["sni"]) ?? null) ?? null,
+      "version": to_string(get(tls, ["version"]) ?? null) ?? null,
+      "issuer":  to_string(get(tls, ["issuerdn"]) ?? null) ?? null,
+      "subject": to_string(get(tls, ["subject"]) ?? null) ?? null
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "Suricata",
+        "vendor_name": "OISF"
+      },
+      "version": "1.0.0",
+      "uid":     flow_id
+    }
+
+    .unmapped = {
+      "event_type":   event_type,
+      "flow_id":      flow_id,
+      "in_iface":     to_string(get(ev, ["in_iface"]) ?? null) ?? null,
+      "alert_action": alert_action,
+      "alert_gid":    to_string(get(alert, ["gid"]) ?? null) ?? null,
+      "alert_rev":    to_string(get(alert, ["rev"]) ?? null) ?? null
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp!(now(), unit: "milliseconds")
+  }
+
+  .raw = raw_msg
+  .uid = uuid_v4()
+
+  del(.message)
+  del(.file)
+  del(.host)
+  del(.source_type)
+'''
+
+# --- FILTERS / ROUTES ---
+[transforms.suricata_filter_valid]
+type      = "filter"
+inputs    = ["suricata_parse_and_normalize"]
+condition = '.class_uid != 0'
+
+[transforms.suricata_filter_failed]
+type      = "filter"
+inputs    = ["suricata_parse_and_normalize"]
+condition = '.class_uid == 0'
+
+[transforms.suricata_route_by_class]
+type   = "route"
+inputs = ["suricata_filter_valid"]
+route.finding = '.class_uid == 2001'
+route.network = '.class_uid == 4001'
+route.http    = '.class_uid == 4002'
+route.dns     = '.class_uid == 4003'
+
+[transforms.suricata_raw_failed]
+type   = "remap"
+inputs = ["suricata_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "network/suricata-eve",
+    "parser":        "suricata-eve",
+    "parse_status":  "failed",
+    "parse_error":   "suricata_eve_json_or_event_type_invalid",
+    "raw":           .raw
+  }
+'''
+
+# --- SINKS : Quickwit OCSF ---
+[sinks.suricata_quickwit_finding]
+type                = "http"
+inputs              = ["suricata_route_by_class.finding"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.suricata_quickwit_finding.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.suricata_quickwit_network]
+type                = "http"
+inputs              = ["suricata_route_by_class.network"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.suricata_quickwit_network.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.suricata_quickwit_http]
+type                = "http"
+inputs              = ["suricata_route_by_class.http"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-http/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.suricata_quickwit_http.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.suricata_quickwit_dns]
+type                = "http"
+inputs              = ["suricata_route_by_class.dns"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-dns/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.suricata_quickwit_dns.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.suricata_quickwit_raw_failed]
+type                = "http"
+inputs              = ["suricata_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.suricata_quickwit_raw_failed.request]
+headers.Content-Type = "application/x-ndjson"

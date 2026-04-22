@@ -1,0 +1,18 @@
+display_name: Suricata EVE
+ocsf_outputs:
+  - class_uid: 2001
+    category_uid: 2
+    index: ocsf-endpoint
+    route: finding
+  - class_uid: 4001
+    category_uid: 4
+    index: ocsf-network
+    route: network
+  - class_uid: 4002
+    category_uid: 4
+    index: ocsf-http
+    route: http
+  - class_uid: 4003
+    category_uid: 4
+    index: ocsf-dns
+    route: dns
