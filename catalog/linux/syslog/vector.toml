@@ -95,12 +95,17 @@ source = '''
 [transforms.syslog_filter_valid]
 type      = "filter"
 inputs    = ["syslog_parse_and_normalize"]
-condition = '.raw != null && .raw != ""'
+condition = '.class_uid == 6001 && .raw != null && .raw != ""'
 
-# --- TRANSFORM : extraction pour raw-logs ---
+[transforms.syslog_filter_failed]
+type      = "filter"
+inputs    = ["syslog_parse_and_normalize"]
+condition = '.class_uid != 6001 || .raw == null || .raw == ""'
+
+# --- TRANSFORM : extraction des echecs pour raw-logs ---
 [transforms.syslog_raw_only]
 type   = "remap"
-inputs = ["syslog_filter_valid"]
+inputs = ["syslog_filter_failed"]
 source = '''
   . = {
     "uid":           .uid,
@@ -108,6 +113,10 @@ source = '''
     "received_time": .received_time,
     "tenant_id":     .tenant_id,
     "datasource_id": .datasource_id,
+    "source_type":   "linux/syslog",
+    "parser":        "syslog",
+    "parse_status":  "failed",
+    "parse_error":   "syslog_empty_raw",
     "raw":           .raw
   }
 '''

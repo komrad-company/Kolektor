@@ -1,2 +1,11 @@
 display_name: Auditd
 default_port: 5143
+ocsf_outputs:
+  - class_uid: 1003
+    category_uid: 1
+    index: ocsf-endpoint
+    route: endpoint
+  - class_uid: 3002
+    category_uid: 3
+    index: ocsf-identity
+    route: identity

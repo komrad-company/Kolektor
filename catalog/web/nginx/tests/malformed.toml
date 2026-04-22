@@ -17,3 +17,16 @@ type   = "vrl"
 source = '''
   assert_eq!(.class_uid, 0)
 '''
+
+[[tests.outputs]]
+extract_from = "nginx_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "web/nginx")
+  assert_eq!(.parse_error, "nginx_combined_log_invalid")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

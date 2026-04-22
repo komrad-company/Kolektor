@@ -125,6 +125,7 @@ source = '''
   }
 
   .raw = del(.message)
+  .uid = uuid_v4()
   del(.timestamp)
   del(.hostname)
   del(.appname)
@@ -141,6 +142,29 @@ source = '''
 type      = "filter"
 inputs    = ["crowdstrike_parse_and_normalize"]
 condition = '.class_uid != 0'
+
+[transforms.crowdstrike_filter_failed]
+type      = "filter"
+inputs    = ["crowdstrike_parse_and_normalize"]
+condition = '.class_uid == 0'
+
+[transforms.crowdstrike_raw_failed]
+type   = "remap"
+inputs = ["crowdstrike_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "endpoint/crowdstrike-falcon",
+    "parser":        "crowdstrike-falcon",
+    "parse_status":  "failed",
+    "parse_error":   "crowdstrike_metadata_missing",
+    "raw":           .raw
+  }
+'''
 
 # --- ROUTE : dispatch par class_uid ---
 # 1003 ProcessRollup2 + 2001 DetectionSummary → ocsf-endpoint
@@ -175,4 +199,17 @@ batch.max_events    = 1000
 batch.timeout_secs  = 5
 
 [sinks.crowdstrike_quickwit_network.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.crowdstrike_quickwit_raw_failed]
+type                = "http"
+inputs              = ["crowdstrike_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.crowdstrike_quickwit_raw_failed.request]
 headers.Content-Type = "application/x-ndjson"

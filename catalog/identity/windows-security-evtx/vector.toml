@@ -17,6 +17,8 @@ encoding = "json"
 type   = "remap"
 inputs = ["winevtx_input"]
 source = '''
+  raw_msg = encode_json(.)
+
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
   .received_time = to_unix_timestamp(now(), unit: "milliseconds")
@@ -44,9 +46,10 @@ source = '''
   is_auth = event_id == 4624 || event_id == 4625 || event_id == 4648
   is_account = event_id == 4720 || event_id == 4732
   is_process = event_id == 4688 || event_id == 4698
+  valid = is_auth || is_account || is_process
 
-  class_uid = if is_auth { 3002 } else if is_account { 3001 } else if is_process { 1003 } else { 3002 }
-  category_uid = if is_process { 1 } else { 3 }
+  class_uid = if is_auth { 3002 } else if is_account { 3001 } else if is_process { 1003 } else { 0 }
+  category_uid = if is_process { 1 } else if is_auth || is_account { 3 } else { 0 }
 
   # Severity
   # 4625 (failed logon), 4648 (explicit creds) = medium
@@ -63,6 +66,9 @@ source = '''
   target_domain = to_string(event_data.TargetDomainName) ?? null
   subject_user = to_string(event_data.SubjectUserName) ?? null
   logon_type = to_int(event_data.LogonType) ?? null
+  process_name = to_string(event_data.NewProcessName) ?? to_string(event_data.ProcessName) ?? null
+  parent_process_name = to_string(event_data.ParentProcessName) ?? null
+  command_line = to_string(event_data.CommandLine) ?? null
 
   .class_uid    = class_uid
   .category_uid = category_uid
@@ -92,6 +98,14 @@ source = '''
 
   .auth_protocol_id = logon_type
 
+  .process = {
+    "name":     process_name,
+    "cmd_line": command_line,
+    "parent_process": {
+      "name": parent_process_name
+    }
+  }
+
   .metadata = {
     "product": {
       "name":        "Windows Security",
@@ -104,15 +118,17 @@ source = '''
   .unmapped = {
     "event_id":        event_id,
     "logon_type":      logon_type,
-    "process_name":    to_string(event_data.NewProcessName) ?? to_string(event_data.ProcessName) ?? null,
-    "parent_process":  to_string(event_data.ParentProcessName) ?? null,
-    "command_line":    to_string(event_data.CommandLine) ?? null,
+    "process_name":    process_name,
+    "parent_process":  parent_process_name,
+    "command_line":    command_line,
     "logon_process":   to_string(event_data.LogonProcessName) ?? null,
     "failure_reason":  to_string(event_data.FailureReason) ?? null,
     "sub_status":      to_string(event_data.SubStatus) ?? null
   }
 
-  .raw = del(.message)
+  .raw = raw_msg
+  .uid = uuid_v4()
+  del(.message)
   del(.winlog)
   del(.event_data)
   del(.timestamp)
@@ -125,7 +141,7 @@ source = '''
 [transforms.winevtx_filter_valid]
 type      = "filter"
 inputs    = ["winevtx_parse_and_normalize"]
-condition = '.unmapped.event_id != 0'
+condition = '.class_uid != 0'
 
 # --- ROUTE : dispatch par class_uid vers l'index OCSF correspondant ---
 [transforms.winevtx_route_by_class]
@@ -133,6 +149,29 @@ type   = "route"
 inputs = ["winevtx_filter_valid"]
 route.identity = '.class_uid == 3001 || .class_uid == 3002'
 route.endpoint = '.class_uid == 1001 || .class_uid == 1003'
+
+[transforms.winevtx_filter_failed]
+type      = "filter"
+inputs    = ["winevtx_parse_and_normalize"]
+condition = '.class_uid == 0'
+
+[transforms.winevtx_raw_failed]
+type   = "remap"
+inputs = ["winevtx_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "identity/windows-security-evtx",
+    "parser":        "windows-security-evtx",
+    "parse_status":  "failed",
+    "parse_error":   "windows_security_event_id_unsupported",
+    "raw":           .raw
+  }
+'''
 
 # --- SINK : Quickwit ocsf-identity (auth + account) ---
 [sinks.winevtx_quickwit_identity]
@@ -158,4 +197,17 @@ batch.max_events    = 1000
 batch.timeout_secs  = 5
 
 [sinks.winevtx_quickwit_endpoint.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.winevtx_quickwit_raw_failed]
+type                = "http"
+inputs              = ["winevtx_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.winevtx_quickwit_raw_failed.request]
 headers.Content-Type = "application/x-ndjson"

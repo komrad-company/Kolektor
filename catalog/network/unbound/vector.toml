@@ -97,10 +97,15 @@ type      = "filter"
 inputs    = ["unbound_parse_and_normalize"]
 condition = '.class_uid == 4003'
 
-# --- TRANSFORM : extraction pour raw-logs ---
+[transforms.unbound_filter_failed]
+type      = "filter"
+inputs    = ["unbound_parse_and_normalize"]
+condition = '.class_uid != 4003'
+
+# --- TRANSFORM : extraction des echecs pour raw-logs ---
 [transforms.unbound_raw_only]
 type   = "remap"
-inputs = ["unbound_filter_valid"]
+inputs = ["unbound_filter_failed"]
 source = '''
   . = {
     "uid":           .uid,
@@ -108,6 +113,10 @@ source = '''
     "received_time": .received_time,
     "tenant_id":     .tenant_id,
     "datasource_id": .datasource_id,
+    "source_type":   "network/unbound",
+    "parser":        "unbound",
+    "parse_status":  "failed",
+    "parse_error":   "unbound_query_invalid",
     "raw":           .raw
   }
 '''

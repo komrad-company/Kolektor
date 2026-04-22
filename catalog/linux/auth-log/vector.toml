@@ -36,6 +36,7 @@ source = '''
   is_ssh_invalid = match(msg, r'Invalid user')
   is_sudo = app == "sudo" || match(msg, r'sudo:')
   is_pam = match(msg, r'pam_unix\(')
+  valid = is_ssh_accept || is_ssh_fail || is_ssh_invalid || is_sudo || is_pam
 
   # SSH accepted: "Accepted publickey for user from 1.2.3.4 port 54321 ssh2"
   ssh_accept = parse_regex(msg, r'Accepted\s+(?P<method>\S+)\s+for\s+(?P<user>\S+)\s+from\s+(?P<ip>\S+)\s+port\s+(?P<port>\d+)') ?? {}
@@ -67,14 +68,20 @@ source = '''
   activity = if is_ssh_accept || is_ssh_fail || is_ssh_invalid { "Logon" } else if is_sudo { "Privilege Escalation" } else { "Other" }
   activity_id = if is_ssh_accept || is_ssh_fail || is_ssh_invalid { 1 } else if is_sudo { 5 } else { 0 }
 
-  .class_uid    = 3002
-  .category_uid = 3
-  .severity_id  = ocsf_severity
-  .time         = to_unix_timestamp(.timestamp, unit: "milliseconds") ?? to_unix_timestamp(now(), unit: "milliseconds")
-  .status       = status
-  .status_id    = status_id
-  .activity_name = activity
-  .activity_id  = activity_id
+  if valid {
+    .class_uid     = 3002
+    .category_uid  = 3
+    .severity_id   = ocsf_severity
+    .status        = status
+    .status_id     = status_id
+    .activity_name = activity
+    .activity_id   = activity_id
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+  }
+  .time = to_unix_timestamp(.timestamp, unit: "milliseconds") ?? to_unix_timestamp(now(), unit: "milliseconds")
 
   .actor = {
     "user": {
@@ -132,12 +139,17 @@ source = '''
 [transforms.authlog_filter_valid]
 type      = "filter"
 inputs    = ["authlog_parse_and_normalize"]
-condition = '.raw != null && .raw != ""'
+condition = '.class_uid == 3002'
 
-# --- TRANSFORM : extraction pour raw-logs ---
+[transforms.authlog_filter_failed]
+type      = "filter"
+inputs    = ["authlog_parse_and_normalize"]
+condition = '.class_uid != 3002'
+
+# --- TRANSFORM : extraction des echecs pour raw-logs ---
 [transforms.authlog_raw_only]
 type   = "remap"
-inputs = ["authlog_filter_valid"]
+inputs = ["authlog_filter_failed"]
 source = '''
   . = {
     "uid":           .uid,
@@ -145,6 +157,10 @@ source = '''
     "received_time": .received_time,
     "tenant_id":     .tenant_id,
     "datasource_id": .datasource_id,
+    "source_type":   "linux/auth-log",
+    "parser":        "auth-log",
+    "parse_status":  "failed",
+    "parse_error":   "auth_log_pattern_unmatched",
     "raw":           .raw
   }
 '''

@@ -19,3 +19,15 @@ source = '''
   assert_eq!(.severity_id, 0)
   assert_eq!(.raw, "this is not json at all")
 '''
+
+[[tests.outputs]]
+extract_from = "traefik_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "web/traefik")
+  assert_eq!(.parse_error, "traefik_json_invalid")
+  assert_eq!(.raw, "this is not json at all")
+'''

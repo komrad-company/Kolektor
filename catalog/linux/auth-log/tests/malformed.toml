@@ -19,11 +19,24 @@ extract_from = "authlog_parse_and_normalize"
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  assert_eq!(.class_uid, 3002)
-  assert_eq!(.status, "Other")
-  assert_eq!(.status_id, 0)
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.status, null)
+  assert_eq!(.status_id, null)
   assert_eq!(.actor.user.name, null)
   assert_eq!(.src_endpoint.ip, null)
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''
+
+[[tests.outputs]]
+extract_from = "authlog_raw_only"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "linux/auth-log")
+  assert_eq!(.parse_error, "auth_log_pattern_unmatched")
   assert!(exists(.raw))
   assert!(exists(.uid))
 '''

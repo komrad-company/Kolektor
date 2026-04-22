@@ -16,6 +16,8 @@ encoding = "json"
 type   = "remap"
 inputs = ["cloudtrail_input"]
 source = '''
+  raw_msg = encode_json(.)
+
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
   .received_time = to_unix_timestamp(now(), unit: "milliseconds")
@@ -24,7 +26,6 @@ source = '''
   # eventVersion, eventTime, eventSource, eventName, awsRegion,
   # sourceIPAddress, userAgent, userIdentity.{type, arn, accountId, userName},
   # requestParameters, responseElements, errorCode, errorMessage
-
   # to_string() sans `!` : retourne null sur champ absent au lieu de panic (events CloudTrail incomplets)
   event_name = to_string(.eventName) ?? ""
   event_source = to_string(.eventSource) ?? ""
@@ -122,7 +123,8 @@ source = '''
     .time         = to_unix_timestamp!(now(), unit: "milliseconds")
   }
 
-  .raw = encode_json(.)
+  .raw = raw_msg
+  .uid = uuid_v4()
   del(.eventVersion)
   del(.eventTime)
   del(.eventSource)
@@ -151,6 +153,29 @@ type      = "filter"
 inputs    = ["cloudtrail_parse_and_normalize"]
 condition = '.class_uid == 6001'
 
+[transforms.cloudtrail_filter_failed]
+type      = "filter"
+inputs    = ["cloudtrail_parse_and_normalize"]
+condition = '.class_uid != 6001'
+
+[transforms.cloudtrail_raw_failed]
+type   = "remap"
+inputs = ["cloudtrail_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "cloud/aws-cloudtrail",
+    "parser":        "cloudtrail",
+    "parse_status":  "failed",
+    "parse_error":   "cloudtrail_event_name_missing",
+    "raw":           .raw
+  }
+'''
+
 # --- SINK : Quickwit ---
 [sinks.cloudtrail_quickwit]
 type                = "http"
@@ -162,4 +187,17 @@ batch.max_events    = 1000
 batch.timeout_secs  = 5
 
 [sinks.cloudtrail_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.cloudtrail_quickwit_raw_failed]
+type                = "http"
+inputs              = ["cloudtrail_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.cloudtrail_quickwit_raw_failed.request]
 headers.Content-Type = "application/x-ndjson"

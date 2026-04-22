@@ -17,6 +17,19 @@ source = '''
   assert_eq!(.class_uid, 0)
 '''
 
+[[tests.outputs]]
+extract_from = "crowdstrike_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "endpoint/crowdstrike-falcon")
+  assert_eq!(.parse_error, "crowdstrike_metadata_missing")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''
+
 [[tests]]
 name = "CrowdStrike — not JSON at all"
 
@@ -34,4 +47,14 @@ extract_from = "crowdstrike_parse_and_normalize"
 type   = "vrl"
 source = '''
   assert_eq!(.class_uid, 0)
+'''
+
+[[tests.outputs]]
+extract_from = "crowdstrike_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.raw, "this is not json at all")
 '''

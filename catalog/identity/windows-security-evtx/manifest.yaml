@@ -1,2 +1,15 @@
 display_name: Windows Security Evtx
 default_port: 8514
+ocsf_outputs:
+  - class_uid: 3002
+    category_uid: 3
+    index: ocsf-identity
+    route: identity
+  - class_uid: 3001
+    category_uid: 3
+    index: ocsf-identity
+    route: identity
+  - class_uid: 1003
+    category_uid: 1
+    index: ocsf-endpoint
+    route: endpoint

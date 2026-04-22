@@ -2,7 +2,7 @@
 
 ## Description
 Collecte les access logs nginx (format combined).
-Normalise en OCSF classe 4001 (Network Activity).
+Normalise en OCSF classe 4002 (HTTP Activity).
 
 ## Format attendu
 ```

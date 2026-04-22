@@ -1,2 +1,19 @@
 display_name: Windows Sysmon
 default_port: 8515
+ocsf_outputs:
+  - class_uid: 1003
+    category_uid: 1
+    index: ocsf-endpoint
+    route: endpoint
+  - class_uid: 1001
+    category_uid: 1
+    index: ocsf-endpoint
+    route: endpoint
+  - class_uid: 4001
+    category_uid: 4
+    index: ocsf-network
+    route: network
+  - class_uid: 4003
+    category_uid: 4
+    index: ocsf-dns
+    route: dns

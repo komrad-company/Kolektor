@@ -173,6 +173,7 @@ mod tests {
             ocsf_class_uid: None,
             ocsf_category_uid: None,
             ocsf_index: None,
+            ocsf_outputs: serde_json::Value::Array(vec![]),
             vector_toml: vector_toml.to_string(),
             description: None,
             built_in: true,

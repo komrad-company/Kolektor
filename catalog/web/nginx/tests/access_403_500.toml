@@ -14,7 +14,7 @@ extract_from = "nginx_parse_and_normalize"
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  assert_eq!(.class_uid, 4001)
+  assert_eq!(.class_uid, 4002)
   assert_eq!(.severity_id, 2)
   assert_eq!(.http_response.code, 403)
   assert_eq!(.http_request.http_method, "POST")

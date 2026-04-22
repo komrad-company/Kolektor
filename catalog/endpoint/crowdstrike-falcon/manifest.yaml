@@ -1,4 +1,15 @@
 display_name: Crowdstrike Falcon
 default_port: 1514
-ocsf_class_uid: 0
-ocsf_category_uid: 0
+ocsf_outputs:
+  - class_uid: 2001
+    category_uid: 2
+    index: ocsf-endpoint
+    route: endpoint
+  - class_uid: 1003
+    category_uid: 1
+    index: ocsf-endpoint
+    route: endpoint
+  - class_uid: 4001
+    category_uid: 4
+    index: ocsf-network
+    route: network

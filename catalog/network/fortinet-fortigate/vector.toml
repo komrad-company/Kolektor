@@ -155,6 +155,7 @@ source = '''
   }
 
   .raw = del(.message)
+  .uid = uuid_v4()
   del(.timestamp)
   del(.hostname)
   del(.appname)
@@ -172,6 +173,29 @@ type      = "filter"
 inputs    = ["fortigate_parse_and_normalize"]
 condition = '.class_uid == 4001'
 
+[transforms.fortigate_filter_failed]
+type      = "filter"
+inputs    = ["fortigate_parse_and_normalize"]
+condition = '.class_uid != 4001'
+
+[transforms.fortigate_raw_failed]
+type   = "remap"
+inputs = ["fortigate_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "network/fortinet-fortigate",
+    "parser":        "fortigate",
+    "parse_status":  "failed",
+    "parse_error":   "fortigate_key_value_invalid",
+    "raw":           .raw
+  }
+'''
+
 # --- SINK : Quickwit ---
 [sinks.fortigate_quickwit]
 type                = "http"
@@ -183,4 +207,17 @@ batch.max_events    = 1000
 batch.timeout_secs  = 5
 
 [sinks.fortigate_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.fortigate_quickwit_raw_failed]
+type                = "http"
+inputs              = ["fortigate_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.fortigate_quickwit_raw_failed.request]
 headers.Content-Type = "application/x-ndjson"

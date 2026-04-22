@@ -17,4 +17,18 @@ extract_from = "sysmon_parse_and_normalize"
 type   = "vrl"
 source = '''
   assert_eq!(.unmapped.event_id, 0)
+  assert_eq!(.class_uid, 0)
+'''
+
+[[tests.outputs]]
+extract_from = "sysmon_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "identity/windows-sysmon")
+  assert_eq!(.parse_error, "sysmon_event_id_unsupported")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
 '''

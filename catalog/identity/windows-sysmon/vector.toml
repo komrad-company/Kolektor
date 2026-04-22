@@ -16,6 +16,8 @@ encoding = "json"
 type   = "remap"
 inputs = ["sysmon_input"]
 source = '''
+  raw_msg = encode_json(.)
+
   .tenant_id     = "${TENANT_ID}"
   .datasource_id = "${DATASOURCE_ID}"
   .received_time = to_unix_timestamp(now(), unit: "milliseconds")
@@ -43,9 +45,10 @@ source = '''
   is_network = event_id == 3
   is_file = event_id == 11
   is_dns = event_id == 22
+  valid = is_process || is_network || is_file || is_dns
 
-  class_uid = if is_process { 1003 } else if is_network { 4001 } else if is_file { 1001 } else if is_dns { 4003 } else { 1003 }
-  category_uid = if is_network || is_dns { 4 } else { 1 }
+  class_uid = if is_process { 1003 } else if is_network { 4001 } else if is_file { 1001 } else if is_dns { 4003 } else { 0 }
+  category_uid = if is_network || is_dns { 4 } else if is_process || is_file { 1 } else { 0 }
 
   ocsf_severity = 1
 
@@ -96,9 +99,11 @@ source = '''
   }
 
   # DNS (Event 22)
+  query_results = to_string(event_data.QueryResults) ?? null
+  qtype_match = if query_results != null { parse_regex(query_results, r'type:\s*(?P<type>\d+)') ?? {} } else { {} }
   .query = {
     "hostname": to_string(event_data.QueryName) ?? null,
-    "type":     to_string(event_data.QueryResults) ?? null
+    "type":     qtype_match.type
   }
 
   .metadata = {
@@ -113,10 +118,13 @@ source = '''
   .unmapped = {
     "event_id":    event_id,
     "rule_name":   to_string(event_data.RuleName) ?? null,
-    "guid":        to_string(event_data.ProcessGuid) ?? null
+    "guid":        to_string(event_data.ProcessGuid) ?? null,
+    "query_results": query_results
   }
 
-  .raw = del(.message)
+  .raw = raw_msg
+  .uid = uuid_v4()
+  del(.message)
   del(.winlog)
   del(.event_data)
   del(.timestamp)
@@ -129,7 +137,7 @@ source = '''
 [transforms.sysmon_filter_valid]
 type      = "filter"
 inputs    = ["sysmon_parse_and_normalize"]
-condition = '.unmapped.event_id != 0'
+condition = '.class_uid != 0'
 
 # --- ROUTE : dispatch par class_uid ---
 [transforms.sysmon_route_by_class]
@@ -138,6 +146,29 @@ inputs = ["sysmon_filter_valid"]
 route.endpoint = '.class_uid == 1001 || .class_uid == 1003'
 route.network  = '.class_uid == 4001'
 route.dns      = '.class_uid == 4003'
+
+[transforms.sysmon_filter_failed]
+type      = "filter"
+inputs    = ["sysmon_parse_and_normalize"]
+condition = '.class_uid == 0'
+
+[transforms.sysmon_raw_failed]
+type   = "remap"
+inputs = ["sysmon_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "identity/windows-sysmon",
+    "parser":        "windows-sysmon",
+    "parse_status":  "failed",
+    "parse_error":   "sysmon_event_id_unsupported",
+    "raw":           .raw
+  }
+'''
 
 # --- SINK : Quickwit ocsf-endpoint ---
 [sinks.sysmon_quickwit_endpoint]
@@ -176,4 +207,17 @@ batch.max_events    = 1000
 batch.timeout_secs  = 5
 
 [sinks.sysmon_quickwit_dns.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.sysmon_quickwit_raw_failed]
+type                = "http"
+inputs              = ["sysmon_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.sysmon_quickwit_raw_failed.request]
 headers.Content-Type = "application/x-ndjson"

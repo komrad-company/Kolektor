@@ -1,6 +1,6 @@
 # ==============================================================================
 # Nginx — combined access log + error log
-# OCSF Class : 4001 (Network Activity) / 6002 (Web Resources Activity)
+# OCSF Class : 4002 (HTTP Activity)
 # Input      : File or Syslog
 # Tested with: nginx 1.24.x / 1.26.x
 # ==============================================================================
@@ -50,7 +50,7 @@ source = '''
     # Severity based on HTTP status
     ocsf_severity = if status_code >= 500 { 4 } else if status_code >= 400 { 2 } else { 1 }
 
-    .class_uid    = 4001
+    .class_uid    = 4002
     .category_uid = 4
     .severity_id  = ocsf_severity
     .time         = ts
@@ -101,6 +101,7 @@ source = '''
   }
 
   .raw = del(.message)
+  .uid = uuid_v4()
   del(.file)
   del(.host)
   del(.source_type)
@@ -110,17 +111,53 @@ source = '''
 [transforms.nginx_filter_valid]
 type      = "filter"
 inputs    = ["nginx_parse_and_normalize"]
-condition = '.class_uid == 4001'
+condition = '.class_uid == 4002'
+
+[transforms.nginx_filter_failed]
+type      = "filter"
+inputs    = ["nginx_parse_and_normalize"]
+condition = '.class_uid != 4002'
+
+[transforms.nginx_raw_failed]
+type   = "remap"
+inputs = ["nginx_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "web/nginx",
+    "parser":        "nginx",
+    "parse_status":  "failed",
+    "parse_error":   "nginx_combined_log_invalid",
+    "raw":           .raw
+  }
+'''
 
 # --- SINK : Quickwit ---
 [sinks.nginx_quickwit]
 type                = "http"
 inputs              = ["nginx_filter_valid"]
-uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-http/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000
 batch.timeout_secs  = 5
 
 [sinks.nginx_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.nginx_quickwit_raw_failed]
+type                = "http"
+inputs              = ["nginx_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.nginx_quickwit_raw_failed.request]
 headers.Content-Type = "application/x-ndjson"

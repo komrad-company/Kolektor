@@ -24,3 +24,16 @@ source = '''
   assert_eq!(.severity_id, 0)
   assert!(exists(.raw))
 '''
+
+[[tests.outputs]]
+extract_from = "unbound_raw_only"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "network/unbound")
+  assert_eq!(.parse_error, "unbound_query_invalid")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

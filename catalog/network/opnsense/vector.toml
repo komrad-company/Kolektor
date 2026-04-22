@@ -139,10 +139,15 @@ type      = "filter"
 inputs    = ["opnsense_parse_and_normalize"]
 condition = '.class_uid == 4001'
 
-# --- TRANSFORM : extraction pour raw-logs ---
+[transforms.opnsense_filter_failed]
+type      = "filter"
+inputs    = ["opnsense_parse_and_normalize"]
+condition = '.class_uid != 4001'
+
+# --- TRANSFORM : extraction des echecs pour raw-logs ---
 [transforms.opnsense_raw_only]
 type   = "remap"
-inputs = ["opnsense_filter_valid"]
+inputs = ["opnsense_filter_failed"]
 source = '''
   . = {
     "uid":           .uid,
@@ -150,6 +155,10 @@ source = '''
     "received_time": .received_time,
     "tenant_id":     .tenant_id,
     "datasource_id": .datasource_id,
+    "source_type":   "network/opnsense",
+    "parser":        "opnsense",
+    "parse_status":  "failed",
+    "parse_error":   "filterlog_csv_invalid",
     "raw":           .raw
   }
 '''

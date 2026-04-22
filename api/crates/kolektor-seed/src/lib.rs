@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::PgPool;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -10,6 +11,16 @@ pub struct Manifest {
     pub default_port: Option<i32>,
     pub ocsf_class_uid: Option<i32>,
     pub ocsf_category_uid: Option<i32>,
+    #[serde(default)]
+    pub ocsf_outputs: Vec<OcsfOutput>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct OcsfOutput {
+    pub class_uid: i32,
+    pub category_uid: i32,
+    pub index: String,
+    pub route: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -21,6 +32,7 @@ pub struct CatalogParser {
     pub ocsf_class_uid: Option<i32>,
     pub ocsf_category_uid: Option<i32>,
     pub ocsf_index: Option<String>,
+    pub ocsf_outputs: Value,
     pub vector_toml: String,
     pub description: Option<String>,
 }
@@ -90,7 +102,14 @@ fn parse_parser_dir(
         .with_context(|| format!("parsing yaml {}", manifest_path.display()))?;
 
     let source_type = format!("{category}/{name}");
-    let ocsf_index = ocsf_index_for(manifest.ocsf_class_uid);
+    let outputs = normalized_outputs(&manifest);
+    let output_count = outputs.len();
+    let primary = primary_output(&manifest, &outputs);
+    let ocsf_index = if output_count <= 1 {
+        primary.as_ref().map(|o| o.index.clone())
+    } else {
+        None
+    };
     let description = read_description(parser_dir);
 
     Ok(CatalogParser {
@@ -98,12 +117,54 @@ fn parse_parser_dir(
         display_name: manifest.display_name,
         category: category.to_string(),
         default_port: manifest.default_port,
-        ocsf_class_uid: manifest.ocsf_class_uid,
-        ocsf_category_uid: manifest.ocsf_category_uid,
+        ocsf_class_uid: primary.as_ref().map(|o| o.class_uid),
+        ocsf_category_uid: primary.as_ref().map(|o| o.category_uid),
         ocsf_index,
+        ocsf_outputs: serde_json::to_value(outputs).context("serializing ocsf_outputs")?,
         vector_toml,
         description,
     })
+}
+
+fn normalized_outputs(manifest: &Manifest) -> Vec<OcsfOutput> {
+    if !manifest.ocsf_outputs.is_empty() {
+        return manifest.ocsf_outputs.clone();
+    }
+
+    let Some(class_uid) = manifest.ocsf_class_uid else {
+        return Vec::new();
+    };
+    let Some(category_uid) = manifest.ocsf_category_uid else {
+        return Vec::new();
+    };
+    let Some(index) = ocsf_index_for(Some(class_uid)) else {
+        return Vec::new();
+    };
+
+    vec![OcsfOutput {
+        class_uid,
+        category_uid,
+        index,
+        route: None,
+    }]
+}
+
+fn primary_output(manifest: &Manifest, outputs: &[OcsfOutput]) -> Option<OcsfOutput> {
+    if let (Some(class_uid), Some(category_uid)) =
+        (manifest.ocsf_class_uid, manifest.ocsf_category_uid)
+    {
+        if class_uid > 0 && category_uid > 0 {
+            let index = ocsf_index_for(Some(class_uid))?;
+            return Some(OcsfOutput {
+                class_uid,
+                category_uid,
+                index,
+                route: None,
+            });
+        }
+    }
+
+    outputs.first().cloned()
 }
 
 fn ocsf_index_for(class_uid: Option<i32>) -> Option<String> {
@@ -148,9 +209,9 @@ pub async fn seed(pool: &PgPool, catalog_dir: &Path) -> Result<SeedReport> {
             r#"
             INSERT INTO kolektor.parsers (
                 id, source_type, display_name, category, default_port,
-                ocsf_class_uid, ocsf_category_uid, ocsf_index,
+                ocsf_class_uid, ocsf_category_uid, ocsf_index, ocsf_outputs,
                 vector_toml, description, built_in, enabled, version
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, true, false, 1)
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, true, false, 1)
             ON CONFLICT (source_type) DO UPDATE SET
                 display_name      = EXCLUDED.display_name,
                 category          = EXCLUDED.category,
@@ -158,12 +219,15 @@ pub async fn seed(pool: &PgPool, catalog_dir: &Path) -> Result<SeedReport> {
                 ocsf_class_uid    = EXCLUDED.ocsf_class_uid,
                 ocsf_category_uid = EXCLUDED.ocsf_category_uid,
                 ocsf_index        = EXCLUDED.ocsf_index,
+                ocsf_outputs      = EXCLUDED.ocsf_outputs,
                 description       = EXCLUDED.description,
                 vector_toml       = EXCLUDED.vector_toml,
                 version           = kolektor.parsers.version
                                       + CASE WHEN kolektor.parsers.vector_toml <> EXCLUDED.vector_toml
+                                                  OR kolektor.parsers.ocsf_outputs <> EXCLUDED.ocsf_outputs
                                              THEN 1 ELSE 0 END,
                 updated_at        = CASE WHEN kolektor.parsers.vector_toml <> EXCLUDED.vector_toml
+                                              OR kolektor.parsers.ocsf_outputs <> EXCLUDED.ocsf_outputs
                                          THEN now() ELSE kolektor.parsers.updated_at END
             RETURNING (xmax = 0)
             "#,
@@ -176,6 +240,7 @@ pub async fn seed(pool: &PgPool, catalog_dir: &Path) -> Result<SeedReport> {
         .bind(parser.ocsf_class_uid)
         .bind(parser.ocsf_category_uid)
         .bind(&parser.ocsf_index)
+        .bind(&parser.ocsf_outputs)
         .bind(&parser.vector_toml)
         .bind(&parser.description)
         .fetch_one(pool)
@@ -209,5 +274,53 @@ mod tests {
         assert_eq!(ocsf_index_for(Some(3001)), Some("ocsf-identity".into()));
         assert_eq!(ocsf_index_for(Some(1003)), Some("ocsf-endpoint".into()));
         assert_eq!(ocsf_index_for(None), None);
+    }
+
+    #[test]
+    fn legacy_manifest_synthesizes_single_output() {
+        let manifest = Manifest {
+            display_name: "OPNsense".into(),
+            default_port: Some(5140),
+            ocsf_class_uid: Some(4001),
+            ocsf_category_uid: Some(4),
+            ocsf_outputs: vec![],
+        };
+
+        let outputs = normalized_outputs(&manifest);
+
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].class_uid, 4001);
+        assert_eq!(outputs[0].index, "ocsf-network");
+    }
+
+    #[test]
+    fn explicit_outputs_support_multi_class_manifest() {
+        let manifest = Manifest {
+            display_name: "Sysmon".into(),
+            default_port: Some(8515),
+            ocsf_class_uid: None,
+            ocsf_category_uid: None,
+            ocsf_outputs: vec![
+                OcsfOutput {
+                    class_uid: 1003,
+                    category_uid: 1,
+                    index: "ocsf-endpoint".into(),
+                    route: Some("endpoint".into()),
+                },
+                OcsfOutput {
+                    class_uid: 4003,
+                    category_uid: 4,
+                    index: "ocsf-dns".into(),
+                    route: Some("dns".into()),
+                },
+            ],
+        };
+
+        let outputs = normalized_outputs(&manifest);
+        let primary = primary_output(&manifest, &outputs).unwrap();
+
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(primary.class_uid, 1003);
+        assert_eq!(primary.index, "ocsf-endpoint");
     }
 }

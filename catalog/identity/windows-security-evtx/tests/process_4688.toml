@@ -59,4 +59,5 @@ extract_from = "winevtx_parse_and_normalize"
 type   = "vrl"
 source = '''
   assert_eq!(.unmapped.event_id, 0)
+  assert_eq!(.class_uid, 0)
 '''
