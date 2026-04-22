@@ -1,0 +1,10 @@
+display_name: Microsoft Entra ID
+ocsf_outputs:
+  - class_uid: 3002
+    category_uid: 3
+    index: ocsf-identity
+    route: identity
+  - class_uid: 6001
+    category_uid: 6
+    index: ocsf-audit
+    route: audit

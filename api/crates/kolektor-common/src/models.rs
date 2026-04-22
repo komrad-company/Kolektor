@@ -32,3 +32,22 @@ pub struct ApiToken {
     pub last_used_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Fetcher {
+    pub id: Uuid,
+    pub name: String,
+    pub provider: String,
+    pub parser_source_type: String,
+    pub enabled: bool,
+    pub interval_seconds: i32,
+    pub output_path: String,
+    pub config: Value,
+    pub state: Value,
+    pub last_attempt_at: Option<DateTime<Utc>>,
+    pub last_success_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    pub version: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

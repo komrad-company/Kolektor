@@ -1,0 +1,28 @@
+[[tests]]
+name = "Microsoft 365 Audit — Exchange admin event"
+
+[[tests.inputs]]
+insert_at = "microsoft365_audit_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"CreationTime":"2026-04-22T10:00:00","Id":"m365-1","Operation":"Set-Mailbox","Workload":"Exchange","UserId":"admin@example.com","UserKey":"1003BFFD","UserType":2,"ClientIP":"203.0.113.10","ResultStatus":"Succeeded","RecordType":1,"ObjectId":"mailbox@example.com","OrganizationId":"tenant-id"}'
+
+[[tests.outputs]]
+extract_from = "microsoft365_audit_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6001)
+  assert_eq!(.category_uid, 6)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.status, "Success")
+  assert_eq!(.api.operation, "Set-Mailbox")
+  assert_eq!(.api.service.name, "Exchange")
+  assert_eq!(.actor.user.name, "admin@example.com")
+  assert_eq!(.src_endpoint.ip, "203.0.113.10")
+  assert_eq!(.metadata.uid, "m365-1")
+  assert_eq!(.unmapped.object_id, "mailbox@example.com")
+  assert!(exists(.raw))
+'''

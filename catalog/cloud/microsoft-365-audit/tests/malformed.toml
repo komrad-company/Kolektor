@@ -1,0 +1,31 @@
+[[tests]]
+name = "Microsoft 365 Audit — malformed JSON"
+
+[[tests.inputs]]
+insert_at = "microsoft365_audit_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = "not json"
+
+[[tests.outputs]]
+extract_from = "microsoft365_audit_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.raw, "not json")
+'''
+
+[[tests.outputs]]
+extract_from = "microsoft365_audit_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "cloud/microsoft-365-audit")
+  assert_eq!(.parse_error, "microsoft365_audit_json_or_required_fields_invalid")
+  assert_eq!(.raw, "not json")
+'''

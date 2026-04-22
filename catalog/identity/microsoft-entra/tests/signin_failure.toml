@@ -1,0 +1,25 @@
+[[tests]]
+name = "Microsoft Entra — failed sign-in"
+
+[[tests.inputs]]
+insert_at = "microsoft_entra_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"id":"signin-2","createdDateTime":"2026-04-22T10:05:00Z","userPrincipalName":"bob@example.com","userId":"user-2","appDisplayName":"Azure Portal","ipAddress":"198.51.100.50","status":{"errorCode":50126,"failureReason":"Invalid username or password"},"riskLevelAggregated":"medium","signInEventTypes":["interactiveUser"]}'
+
+[[tests.outputs]]
+extract_from = "microsoft_entra_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3002)
+  assert_eq!(.severity_id, 3)
+  assert_eq!(.status, "Failure")
+  assert_eq!(.status_id, 2)
+  assert_eq!(.actor.user.name, "bob@example.com")
+  assert_eq!(.unmapped.failure_reason, "Invalid username or password")
+  assert_eq!(.unmapped.risk_level_aggregated, "medium")
+  assert_eq!(.unmapped.sign_in_event_types[0], "interactiveUser")
+'''

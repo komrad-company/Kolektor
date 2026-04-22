@@ -1,0 +1,149 @@
+# ==============================================================================
+# Microsoft 365 Unified Audit — Management Activity API JSONL
+# OCSF Class : 6001 (API Activity)
+# Input      : File (JSON per line) written by kolektor-fetcher
+# ==============================================================================
+
+[sources.microsoft365_audit_file]
+type    = "file"
+include = ["${MS365_AUDIT_LOG:-/var/lib/kolektor/fetcher/microsoft-365-audit.jsonl}"]
+
+[transforms.microsoft365_audit_parse_and_normalize]
+type   = "remap"
+inputs = ["microsoft365_audit_file"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  raw_msg = string!(.message)
+  parsed = parse_json(raw_msg) ?? null
+  valid_json = is_object(parsed)
+
+  if valid_json {
+    ev = object!(parsed)
+    operation = to_string(get(ev, ["Operation"]) ?? null) ?? null
+    workload = to_string(get(ev, ["Workload"]) ?? null) ?? null
+    valid = operation != null && operation != "" && workload != null && workload != ""
+
+    ts_str = to_string(get(ev, ["CreationTime"]) ?? null) ?? null
+    parsed_ts = if ts_str != null { parse_timestamp(ts_str, format: "%+") ?? parse_timestamp(ts_str, format: "%Y-%m-%dT%H:%M:%S") ?? null } else { null }
+    ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+
+    result = to_string(get(ev, ["ResultStatus"]) ?? null) ?? null
+    result_lc = if result != null { downcase!(result) } else { "" }
+    is_failure = result_lc != "" && result_lc != "succeeded" && result_lc != "success" && result_lc != "true"
+
+    .class_uid    = if valid { 6001 } else { 0 }
+    .category_uid = if valid { 6 } else { 0 }
+    .severity_id  = if !valid { 0 } else if is_failure { 3 } else { 1 }
+    .time         = ts
+    .status       = if is_failure { "Failure" } else { "Success" }
+    .status_id    = if is_failure { 2 } else { 1 }
+
+    .api = {
+      "operation": operation,
+      "service": {
+        "name": workload
+      },
+      "response": {
+        "error_message": result
+      }
+    }
+
+    .actor = {
+      "user": {
+        "name": to_string(get(ev, ["UserId"]) ?? null) ?? null,
+        "uid":  to_string(get(ev, ["UserKey"]) ?? null) ?? null,
+        "type": to_string(get(ev, ["UserType"]) ?? null) ?? null
+      }
+    }
+
+    .src_endpoint = {
+      "ip": to_string(get(ev, ["ClientIP"]) ?? null) ?? null
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "Microsoft 365 Unified Audit",
+        "vendor_name": "Microsoft"
+      },
+      "version": "1.0.0",
+      "uid":     to_string(get(ev, ["Id"]) ?? null) ?? null,
+      "log_provider": workload
+    }
+
+    .unmapped = {
+      "record_type":        get(ev, ["RecordType"]) ?? null,
+      "object_id":          to_string(get(ev, ["ObjectId"]) ?? null) ?? null,
+      "organization_id":    to_string(get(ev, ["OrganizationId"]) ?? null) ?? null,
+      "client_info_string": to_string(get(ev, ["ClientInfoString"]) ?? null) ?? null,
+      "external_access":    get(ev, ["ExternalAccess"]) ?? null,
+      "user_agent":         to_string(get(ev, ["UserAgent"]) ?? null) ?? null
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  .raw = raw_msg
+  .uid = uuid_v4()
+  del(.message)
+  del(.file)
+  del(.host)
+  del(.source_type)
+'''
+
+[transforms.microsoft365_audit_filter_valid]
+type      = "filter"
+inputs    = ["microsoft365_audit_parse_and_normalize"]
+condition = '.class_uid == 6001'
+
+[transforms.microsoft365_audit_filter_failed]
+type      = "filter"
+inputs    = ["microsoft365_audit_parse_and_normalize"]
+condition = '.class_uid != 6001'
+
+[transforms.microsoft365_audit_raw_failed]
+type   = "remap"
+inputs = ["microsoft365_audit_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "cloud/microsoft-365-audit",
+    "parser":        "microsoft-365-audit",
+    "parse_status":  "failed",
+    "parse_error":   "microsoft365_audit_json_or_required_fields_invalid",
+    "raw":           .raw
+  }
+'''
+
+[sinks.microsoft365_audit_quickwit]
+type                = "http"
+inputs              = ["microsoft365_audit_filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-audit/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.microsoft365_audit_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.microsoft365_audit_quickwit_raw_failed]
+type                = "http"
+inputs              = ["microsoft365_audit_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.microsoft365_audit_quickwit_raw_failed.request]
+headers.Content-Type = "application/x-ndjson"
