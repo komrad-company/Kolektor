@@ -54,8 +54,10 @@ kolektor/
 │   ├── cloud/              # Cloud providers → OCSF 6001 API Activity
 │   │   └── aws-cloudtrail/ # JSON via HTTP
 │   │
-│   └── web/                # Serveurs web → OCSF 4001 Network Activity
-│       └── nginx/          #   combined access log via file
+│   └── web/                # Serveurs web / edge → OCSF 4002 HTTP Activity
+│       ├── nginx/          #   combined access log via file
+│       ├── traefik/        #   access log JSON via file
+│       └── cloudflare-http/ #  HTTP Requests Logpull / export JSONL
 │
 └── ci/                     # Scripts CI
     ├── validate.sh         # vector validate sur chaque config
@@ -129,7 +131,7 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 | Index            | Classe OCSF                | category_uid | Sources typiques               |
 |------------------|----------------------------|--------------|--------------------------------|
 | `ocsf-network`   | 4001 Network Activity      | 4            | opnsense, fortigate, suricata flow |
-| `ocsf-http`      | 4002 HTTP Activity         | 4            | nginx, traefik, suricata HTTP  |
+| `ocsf-http`      | 4002 HTTP Activity         | 4            | nginx, traefik, cloudflare, suricata HTTP |
 | `ocsf-dns`       | 4003 DNS Activity          | 4            | unbound, sysmon DNS, suricata DNS |
 | `ocsf-endpoint`  | 1001/1003 File/Process     | 1            | crowdstrike, sysmon, auditd, suricata alerts |
 | `ocsf-identity`  | 3001/3002 Account/Auth     | 3            | windows-evtx, auth-log         |
@@ -160,5 +162,11 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 - Un evenement parse va dans son index OCSF et conserve toujours le log source dans le champ `raw`.
 - Un evenement non parse ne va pas dans un index OCSF : il est envoye dans `raw-logs` avec `parse_status = "failed"`, `source_type`, `parser`, `parse_error`, `raw`, `uid`, `tenant_id` et `datasource_id`.
 - Les parsers multi-classes declarent leurs sorties dans `manifest.yaml` via `ocsf_outputs`, et routent chaque classe vers son index Quickwit.
+
+### Convention collecteur / parser
+
+- Le parser Vector ne porte que la normalisation : format brut canonique en entree, enrichissement minimal, mapping OCSF, routage Quickwit.
+- La recuperation des logs cloud/SaaS est la responsabilite d'un collecteur : API pull avec curseur, object storage + queue, Event Hub/EventBridge, ou Logpush HTTP quand le fournisseur sait pousser.
+- Pour les sources cloud, le format canonique recommande est JSON line-delimited. Le meme parser doit pouvoir traiter les lignes issues d'un collecteur API ou d'un export pousse si le schema source reste identique.
 
 Voir `_schema/README.md` pour le guide complet.

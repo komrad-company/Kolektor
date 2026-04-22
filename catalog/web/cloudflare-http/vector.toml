@@ -1,0 +1,254 @@
+# ==============================================================================
+# Cloudflare HTTP Requests — Logpush / Logpull JSON
+# OCSF Class : 4002 (HTTP Activity)
+# Input      : File (JSON per line)
+# Tested with: Cloudflare Logs http_requests dataset
+# ==============================================================================
+
+[sources.cloudflare_http_file]
+type    = "file"
+include = ["${CLOUDFLARE_HTTP_LOG:-/var/log/cloudflare/http_requests.json}"]
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.cloudflare_http_parse_and_normalize]
+type   = "remap"
+inputs = ["cloudflare_http_file"]
+source = '''
+  tenant_id = "${TENANT_ID}"
+  datasource_id = "${DATASOURCE_ID}"
+  received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  raw_msg = if exists(.message) { string!(.message) } else { encode_json(.) }
+  parsed = if exists(.message) { parse_json(raw_msg) ?? null } else { . }
+  valid_json = is_object(parsed)
+
+  if valid_json {
+    cf = object!(parsed)
+
+    method = to_string(get(cf, ["ClientRequestMethod"]) ?? null) ?? null
+    host = to_string(get(cf, ["ClientRequestHost"]) ?? null) ?? null
+    uri = to_string(get(cf, ["ClientRequestURI"]) ?? null) ?? null
+    path_raw = to_string(get(cf, ["ClientRequestPath"]) ?? null) ?? null
+    scheme = to_string(get(cf, ["ClientRequestScheme"]) ?? null) ?? null
+    protocol = to_string(get(cf, ["ClientRequestProtocol"]) ?? null) ?? null
+    user_agent = to_string(get(cf, ["ClientRequestUserAgent"]) ?? null) ?? null
+    referer = to_string(get(cf, ["ClientRequestReferer"]) ?? null) ?? null
+    src_ip = to_string(get(cf, ["ClientIP"]) ?? null) ?? null
+
+    status_raw = get(cf, ["EdgeResponseStatus"]) ?? null
+    status_code = if status_raw != null { to_int(status_raw) ?? 0 } else { 0 }
+    edge_bytes_raw = get(cf, ["EdgeResponseBytes"]) ?? null
+    if edge_bytes_raw == null {
+      edge_bytes_raw = get(cf, ["EdgeResponseBodyBytes"]) ?? null
+    }
+    edge_bytes = if edge_bytes_raw != null { to_int(edge_bytes_raw) ?? null } else { null }
+    req_bytes_raw = get(cf, ["ClientRequestBytes"]) ?? null
+    req_bytes = if req_bytes_raw != null { to_int(req_bytes_raw) ?? null } else { null }
+
+    ray_id = to_string(get(cf, ["RayID"]) ?? null) ?? null
+    parent_ray_id = to_string(get(cf, ["ParentRayID"]) ?? null) ?? null
+    edge_colo = to_string(get(cf, ["EdgeColoCode"]) ?? null) ?? null
+    country = to_string(get(cf, ["ClientCountry"]) ?? null) ?? null
+    asn_raw = get(cf, ["ClientASN"]) ?? null
+    asn = if asn_raw != null { to_int(asn_raw) ?? null } else { null }
+    cache_status = to_string(get(cf, ["CacheCacheStatus"]) ?? null) ?? null
+    origin_status_raw = get(cf, ["OriginResponseStatus"]) ?? null
+    origin_status = if origin_status_raw != null { to_int(origin_status_raw) ?? null } else { null }
+    request_source = to_string(get(cf, ["ClientRequestSource"]) ?? null) ?? null
+
+    security_action = to_string(get(cf, ["SecurityAction"]) ?? null) ?? null
+    security_actions = get(cf, ["SecurityActions"]) ?? null
+    security_rule_ids = get(cf, ["SecurityRuleIDs"]) ?? null
+    security_sources = get(cf, ["SecuritySources"]) ?? null
+    security_action_lc = if security_action != null { downcase!(security_action) } else { "" }
+    security_actions_lc = downcase(encode_json(security_actions))
+    has_security_signal = (security_action_lc != "" && security_action_lc != "unknown") || (security_actions_lc != "null" && security_actions_lc != "[]")
+    is_mitigated = contains(security_action_lc, "block") || contains(security_action_lc, "challenge") || contains(security_action_lc, "connectionclose") || contains(security_actions_lc, "block") || contains(security_actions_lc, "challenge") || contains(security_actions_lc, "connectionclose")
+
+    ts_raw = get(cf, ["EdgeStartTimestamp"]) ?? null
+    if ts_raw == null {
+      ts_raw = get(cf, ["EdgeEndTimestamp"]) ?? null
+    }
+    if ts_raw == null {
+      ts_raw = get(cf, ["Datetime"]) ?? null
+    }
+    ts = to_unix_timestamp(now(), unit: "milliseconds")
+    if ts_raw != null {
+      if is_integer(ts_raw) || is_float(ts_raw) {
+        ts_num = to_int(ts_raw) ?? 0
+        ts = if ts_num > 1000000000000000 {
+          to_int(ts_num / 1000000)
+        } else if ts_num > 1000000000000 {
+          ts_num
+        } else if ts_num > 1000000000 {
+          ts_num * 1000
+        } else {
+          ts
+        }
+      } else {
+        ts_str = to_string(ts_raw) ?? ""
+        parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+        ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { ts }
+      }
+    }
+
+    valid = method != null && method != "" && host != null && host != ""
+    path = if path_raw != null && path_raw != "" { path_raw } else { uri }
+    referrer_value = if referer != null && referer != "-" && referer != "" { referer } else { null }
+    ocsf_severity = if is_mitigated { 3 } else if status_code >= 500 { 4 } else if status_code >= 400 { 2 } else { 1 }
+    status = if status_code >= 400 || is_mitigated { "Failure" } else { "Success" }
+    status_id = if status_code >= 400 || is_mitigated { 2 } else { 1 }
+
+    if valid {
+      . = {
+        "uid":           uuid_v4(),
+        "tenant_id":     tenant_id,
+        "datasource_id": datasource_id,
+        "received_time": received_time,
+        "time":          ts,
+        "class_uid":     4002,
+        "category_uid":  4,
+        "severity_id":   ocsf_severity,
+        "status":        status,
+        "status_id":     status_id,
+        "http_request": {
+          "http_method": method,
+          "url": {
+            "hostname": host,
+            "path":     path,
+            "scheme":   scheme
+          },
+          "version":    protocol,
+          "referrer":   referrer_value,
+          "user_agent": user_agent
+        },
+        "http_response": {
+          "code": status_code
+        },
+        "src_endpoint": {
+          "ip":  src_ip,
+          "asn": asn,
+          "location": {
+            "country": country
+          }
+        },
+        "traffic": {
+          "bytes_in":  req_bytes,
+          "bytes_out": edge_bytes
+        },
+        "metadata": {
+          "product": {
+            "name":        "Cloudflare HTTP Requests",
+            "vendor_name": "Cloudflare"
+          },
+          "version": "1.0.0",
+          "uid":     ray_id
+        },
+        "unmapped": {
+          "ray_id":             ray_id,
+          "parent_ray_id":      parent_ray_id,
+          "edge_colo":          edge_colo,
+          "cache_status":       cache_status,
+          "origin_status":      origin_status,
+          "client_country":     country,
+          "client_asn":         asn,
+          "request_source":     request_source,
+          "security_signal":    has_security_signal,
+          "security_action":    security_action,
+          "security_actions":   security_actions,
+          "security_rule_ids":  security_rule_ids,
+          "security_sources":   security_sources,
+          "bot_score":          get(cf, ["BotScore"]) ?? null,
+          "bot_score_src":      to_string(get(cf, ["BotScoreSrc"]) ?? null) ?? null,
+          "bot_tags":           get(cf, ["BotTags"]) ?? null,
+          "ja3_hash":           to_string(get(cf, ["JA3Hash"]) ?? null) ?? null,
+          "ja4":                to_string(get(cf, ["JA4"]) ?? null) ?? null,
+          "waf_attack_score":   get(cf, ["WAFAttackScore"]) ?? null,
+          "waf_rce_score":      get(cf, ["WAFRCEAttackScore"]) ?? null,
+          "waf_sqli_score":     get(cf, ["WAFSQLiAttackScore"]) ?? null,
+          "waf_xss_score":      get(cf, ["WAFXSSAttackScore"]) ?? null
+        },
+        "raw": raw_msg
+      }
+    } else {
+      . = {
+        "uid":           uuid_v4(),
+        "tenant_id":     tenant_id,
+        "datasource_id": datasource_id,
+        "received_time": received_time,
+        "time":          ts,
+        "class_uid":     0,
+        "category_uid":  0,
+        "severity_id":   0,
+        "raw":           raw_msg
+      }
+    }
+  } else {
+    . = {
+      "uid":           uuid_v4(),
+      "tenant_id":     tenant_id,
+      "datasource_id": datasource_id,
+      "received_time": received_time,
+      "time":          to_unix_timestamp(now(), unit: "milliseconds"),
+      "class_uid":     0,
+      "category_uid":  0,
+      "severity_id":   0,
+      "raw":           raw_msg
+    }
+  }
+'''
+
+# --- FILTERS ---
+[transforms.cloudflare_http_filter_valid]
+type      = "filter"
+inputs    = ["cloudflare_http_parse_and_normalize"]
+condition = '.class_uid == 4002'
+
+[transforms.cloudflare_http_filter_failed]
+type      = "filter"
+inputs    = ["cloudflare_http_parse_and_normalize"]
+condition = '.class_uid != 4002'
+
+[transforms.cloudflare_http_raw_failed]
+type   = "remap"
+inputs = ["cloudflare_http_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "web/cloudflare-http",
+    "parser":        "cloudflare-http",
+    "parse_status":  "failed",
+    "parse_error":   "cloudflare_http_json_or_required_fields_invalid",
+    "raw":           .raw
+  }
+'''
+
+# --- SINK : Quickwit ---
+[sinks.cloudflare_http_quickwit]
+type                = "http"
+inputs              = ["cloudflare_http_filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-http/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.cloudflare_http_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.cloudflare_http_quickwit_raw_failed]
+type                = "http"
+inputs              = ["cloudflare_http_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.cloudflare_http_quickwit_raw_failed.request]
+headers.Content-Type = "application/x-ndjson"

@@ -1,0 +1,38 @@
+[[tests]]
+name = "Cloudflare HTTP — 200 OK request"
+
+[[tests.inputs]]
+insert_at = "cloudflare_http_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"RayID":"806c30a3cec56817","EdgeStartTimestamp":"2025-07-17T07:54:19Z","ClientIP":"203.0.113.10","ClientCountry":"US","ClientASN":64500,"ClientRequestHost":"app.example.com","ClientRequestMethod":"GET","ClientRequestURI":"/api/v1/users?active=true","ClientRequestPath":"/api/v1/users","ClientRequestProtocol":"HTTP/2","ClientRequestScheme":"https","ClientRequestUserAgent":"Mozilla/5.0","ClientRequestReferer":"https://example.com/dashboard","ClientRequestBytes":512,"EdgeResponseStatus":200,"EdgeResponseBytes":4096,"EdgeColoCode":"CDG","CacheCacheStatus":"hit","ClientRequestSource":"eyeball"}'
+
+[[tests.outputs]]
+extract_from = "cloudflare_http_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4002)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.status, "Success")
+  assert_eq!(.http_request.http_method, "GET")
+  assert_eq!(.http_request.url.hostname, "app.example.com")
+  assert_eq!(.http_request.url.path, "/api/v1/users")
+  assert_eq!(.http_request.url.scheme, "https")
+  assert_eq!(.http_request.version, "HTTP/2")
+  assert_eq!(.http_request.user_agent, "Mozilla/5.0")
+  assert_eq!(.http_request.referrer, "https://example.com/dashboard")
+  assert_eq!(.http_response.code, 200)
+  assert_eq!(.src_endpoint.ip, "203.0.113.10")
+  assert_eq!(.src_endpoint.asn, 64500)
+  assert_eq!(.traffic.bytes_in, 512)
+  assert_eq!(.traffic.bytes_out, 4096)
+  assert_eq!(.metadata.product.name, "Cloudflare HTTP Requests")
+  assert_eq!(.metadata.uid, "806c30a3cec56817")
+  assert_eq!(.unmapped.edge_colo, "CDG")
+  assert_eq!(.unmapped.cache_status, "hit")
+  assert!(exists(.raw))
+'''
