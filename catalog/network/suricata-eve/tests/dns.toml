@@ -1,0 +1,28 @@
+[[tests]]
+name = "Suricata EVE — dns query answer"
+
+[[tests.inputs]]
+insert_at = "suricata_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"timestamp":"2024-04-14T10:24:00.000000+0000","flow_id":987654321,"event_type":"dns","src_ip":"10.0.0.5","src_port":53555,"dest_ip":"1.1.1.1","dest_port":53,"proto":"UDP","app_proto":"dns","dns":{"type":"answer","id":4242,"rrname":"example.com","rrtype":"A","rcode":"NOERROR","answers":[{"rrname":"example.com","rrtype":"A","ttl":300,"rdata":"93.184.216.34"}]}}'
+
+[[tests.outputs]]
+extract_from = "suricata_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4003)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.query.hostname, "example.com")
+  assert_eq!(.query.type, "A")
+  assert_eq!(.query.rcode, "NOERROR")
+  assert_eq!(.answers[0].rdata, "93.184.216.34")
+  assert_eq!(.src_endpoint.ip, "10.0.0.5")
+  assert_eq!(.dst_endpoint.port, 53)
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''
