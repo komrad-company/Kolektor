@@ -1,0 +1,65 @@
+[[tests]]
+name = "Suricata EVE — malformed JSON"
+
+[[tests.inputs]]
+insert_at = "suricata_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = "this is not json"
+
+[[tests.outputs]]
+extract_from = "suricata_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.category_uid, 0)
+  assert_eq!(.severity_id, 0)
+  assert_eq!(.raw, "this is not json")
+  assert!(exists(.uid))
+'''
+
+[[tests.outputs]]
+extract_from = "suricata_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "network/suricata-eve")
+  assert_eq!(.parse_error, "suricata_eve_json_or_event_type_invalid")
+  assert_eq!(.raw, "this is not json")
+  assert!(exists(.uid))
+'''
+
+[[tests]]
+name = "Suricata EVE — unsupported event type"
+
+[[tests.inputs]]
+insert_at = "suricata_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"timestamp":"2024-04-14T10:26:00.000000+0000","event_type":"stats","stats":{"uptime":3600}}'
+
+[[tests.outputs]]
+extract_from = "suricata_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.unmapped.event_type, "stats")
+'''
+
+[[tests.outputs]]
+extract_from = "suricata_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.raw, "{\"timestamp\":\"2024-04-14T10:26:00.000000+0000\",\"event_type\":\"stats\",\"stats\":{\"uptime\":3600}}")
+'''
