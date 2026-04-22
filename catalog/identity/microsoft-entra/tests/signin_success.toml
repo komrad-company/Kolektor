@@ -1,0 +1,27 @@
+[[tests]]
+name = "Microsoft Entra — successful sign-in"
+
+[[tests.inputs]]
+insert_at = "microsoft_entra_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"id":"signin-1","createdDateTime":"2026-04-22T10:00:00Z","userPrincipalName":"alice@example.com","userId":"user-1","appDisplayName":"Office 365","appId":"app-1","ipAddress":"203.0.113.10","status":{"errorCode":0},"conditionalAccessStatus":"success","resourceDisplayName":"Microsoft Graph","clientAppUsed":"Browser"}'
+
+[[tests.outputs]]
+extract_from = "microsoft_entra_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3002)
+  assert_eq!(.category_uid, 3)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.status, "Success")
+  assert_eq!(.actor.user.name, "alice@example.com")
+  assert_eq!(.src_endpoint.ip, "203.0.113.10")
+  assert_eq!(.app.name, "Office 365")
+  assert_eq!(.metadata.uid, "signin-1")
+  assert_eq!(.unmapped.event_family, "signIn")
+  assert!(exists(.raw))
+'''

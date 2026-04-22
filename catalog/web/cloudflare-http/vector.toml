@@ -7,7 +7,7 @@
 
 [sources.cloudflare_http_file]
 type    = "file"
-include = ["${CLOUDFLARE_HTTP_LOG:-/var/log/cloudflare/http_requests.json}"]
+include = ["${CLOUDFLARE_HTTP_LOG:-/var/lib/kolektor/fetcher/cloudflare-http.jsonl}"]
 
 # --- TRANSFORM : parse + normalisation OCSF ---
 [transforms.cloudflare_http_parse_and_normalize]

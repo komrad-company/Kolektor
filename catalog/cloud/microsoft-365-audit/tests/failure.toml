@@ -1,0 +1,22 @@
+[[tests]]
+name = "Microsoft 365 Audit — failed operation"
+
+[[tests.inputs]]
+insert_at = "microsoft365_audit_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"CreationTime":"2026-04-22T10:03:00Z","Id":"m365-3","Operation":"UserLoggedIn","Workload":"AzureActiveDirectory","UserId":"bob@example.com","ClientIP":"203.0.113.22","ResultStatus":"Failed","RecordType":15}'
+
+[[tests.outputs]]
+extract_from = "microsoft365_audit_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6001)
+  assert_eq!(.severity_id, 3)
+  assert_eq!(.status, "Failure")
+  assert_eq!(.status_id, 2)
+  assert_eq!(.api.response.error_message, "Failed")
+'''

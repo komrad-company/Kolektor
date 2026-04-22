@@ -40,7 +40,7 @@ et ecrive les lignes JSON dans ce fichier.
 ## Variables
 | Variable                | Default                                  | Description                  |
 |-------------------------|------------------------------------------|------------------------------|
-| `CLOUDFLARE_HTTP_LOG`   | `/var/log/cloudflare/http_requests.json` | Fichier JSONL optionnel      |
+| `CLOUDFLARE_HTTP_LOG`   | `/var/lib/kolektor/fetcher/cloudflare-http.jsonl` | Fichier JSONL optionnel |
 | `TENANT_ID`             | -                                        | Injecte runtime              |
 | `DATASOURCE_ID`         | -                                        | Injecte runtime              |
 | `QUICKWIT_ENDPOINT`     | -                                        | Endpoint Quickwit            |

@@ -1,0 +1,219 @@
+# ==============================================================================
+# Microsoft Entra ID — Graph audit logs JSONL
+# OCSF Classes: 3002 (Authentication), 6001 (API Activity)
+# Input       : File (JSON per line) written by kolektor-fetcher
+# ==============================================================================
+
+[sources.microsoft_entra_file]
+type    = "file"
+include = ["${MS_ENTRA_LOG:-/var/lib/kolektor/fetcher/microsoft-entra.jsonl}"]
+
+[transforms.microsoft_entra_parse_and_normalize]
+type   = "remap"
+inputs = ["microsoft_entra_file"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  raw_msg = string!(.message)
+  parsed = parse_json(raw_msg) ?? null
+  valid_json = is_object(parsed)
+
+  if valid_json {
+    ev = object!(parsed)
+    signin_time = to_string(get(ev, ["createdDateTime"]) ?? null) ?? null
+    audit_time = to_string(get(ev, ["activityDateTime"]) ?? null) ?? null
+    is_signin = signin_time != null && signin_time != ""
+    is_directory_audit = audit_time != null && audit_time != ""
+    valid = is_signin || is_directory_audit
+
+    ts_str = if is_signin { signin_time } else { audit_time }
+    parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+    ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+
+    if is_signin {
+      status_obj = object(get(ev, ["status"]) ?? {}) ?? {}
+      error_code = to_int(get(status_obj, ["errorCode"]) ?? 0) ?? 0
+      failure_reason = to_string(get(status_obj, ["failureReason"]) ?? null) ?? null
+      is_failure = error_code != 0
+
+      .class_uid    = if valid { 3002 } else { 0 }
+      .category_uid = if valid { 3 } else { 0 }
+      .severity_id  = if is_failure { 3 } else { 1 }
+      .time         = ts
+      .status       = if is_failure { "Failure" } else { "Success" }
+      .status_id    = if is_failure { 2 } else { 1 }
+
+      .actor = {
+        "user": {
+          "name": to_string(get(ev, ["userPrincipalName"]) ?? null) ?? null,
+          "uid":  to_string(get(ev, ["userId"]) ?? null) ?? null
+        }
+      }
+
+      .src_endpoint = {
+        "ip": to_string(get(ev, ["ipAddress"]) ?? null) ?? null
+      }
+
+      .app = {
+        "name": to_string(get(ev, ["appDisplayName"]) ?? null) ?? null,
+        "uid":  to_string(get(ev, ["appId"]) ?? null) ?? null
+      }
+
+      .metadata = {
+        "product": {
+          "name":        "Microsoft Entra ID",
+          "vendor_name": "Microsoft"
+        },
+        "version": "1.0.0",
+        "uid":     to_string(get(ev, ["id"]) ?? null) ?? null
+      }
+
+      .unmapped = {
+        "event_family":              "signIn",
+        "conditional_access_status": to_string(get(ev, ["conditionalAccessStatus"]) ?? null) ?? null,
+        "failure_reason":            failure_reason,
+        "risk_detail":               to_string(get(ev, ["riskDetail"]) ?? null) ?? null,
+        "risk_level_aggregated":     to_string(get(ev, ["riskLevelAggregated"]) ?? null) ?? null,
+        "sign_in_event_types":       get(ev, ["signInEventTypes"]) ?? null,
+        "resource_display_name":     to_string(get(ev, ["resourceDisplayName"]) ?? null) ?? null,
+        "service_principal_id":      to_string(get(ev, ["servicePrincipalId"]) ?? null) ?? null,
+        "client_app_used":           to_string(get(ev, ["clientAppUsed"]) ?? null) ?? null
+      }
+    } else {
+      initiated_by = object(get(ev, ["initiatedBy"]) ?? {}) ?? {}
+      initiated_user = object(get(initiated_by, ["user"]) ?? {}) ?? {}
+      initiated_app = object(get(initiated_by, ["app"]) ?? {}) ?? {}
+      result = to_string(get(ev, ["result"]) ?? null) ?? null
+      is_failure = result != null && result != "" && result != "success"
+
+      .class_uid    = if valid { 6001 } else { 0 }
+      .category_uid = if valid { 6 } else { 0 }
+      .severity_id  = if is_failure { 3 } else { 1 }
+      .time         = ts
+      .status       = if is_failure { "Failure" } else { "Success" }
+      .status_id    = if is_failure { 2 } else { 1 }
+
+      .api = {
+        "operation": to_string(get(ev, ["activityDisplayName"]) ?? null) ?? null,
+        "service": {
+          "name": to_string(get(ev, ["category"]) ?? "Microsoft Entra ID") ?? "Microsoft Entra ID"
+        },
+        "response": {
+          "error_message": to_string(get(ev, ["resultReason"]) ?? null) ?? null
+        }
+      }
+
+      .actor = {
+        "user": {
+          "name": to_string(get(initiated_user, ["userPrincipalName"]) ?? null) ?? null,
+          "uid":  to_string(get(initiated_user, ["id"]) ?? null) ?? null
+        },
+        "app": {
+          "name": to_string(get(initiated_app, ["displayName"]) ?? null) ?? null,
+          "uid":  to_string(get(initiated_app, ["appId"]) ?? null) ?? null
+        }
+      }
+
+      .metadata = {
+        "product": {
+          "name":        "Microsoft Entra ID",
+          "vendor_name": "Microsoft"
+        },
+        "version": "1.0.0",
+        "uid":     to_string(get(ev, ["id"]) ?? null) ?? null
+      }
+
+      .unmapped = {
+        "event_family":      "directoryAudit",
+        "logged_by_service": to_string(get(ev, ["loggedByService"]) ?? null) ?? null,
+        "target_resources":  get(ev, ["targetResources"]) ?? null,
+        "additional_details": get(ev, ["additionalDetails"]) ?? null,
+        "correlation_id":    to_string(get(ev, ["correlationId"]) ?? null) ?? null
+      }
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  .raw = raw_msg
+  .uid = uuid_v4()
+  del(.message)
+  del(.file)
+  del(.host)
+  del(.source_type)
+'''
+
+[transforms.microsoft_entra_filter_valid]
+type      = "filter"
+inputs    = ["microsoft_entra_parse_and_normalize"]
+condition = '.class_uid != 0'
+
+[transforms.microsoft_entra_filter_failed]
+type      = "filter"
+inputs    = ["microsoft_entra_parse_and_normalize"]
+condition = '.class_uid == 0'
+
+[transforms.microsoft_entra_route_by_class]
+type   = "route"
+inputs = ["microsoft_entra_filter_valid"]
+route.identity = '.class_uid == 3002'
+route.audit    = '.class_uid == 6001'
+
+[transforms.microsoft_entra_raw_failed]
+type   = "remap"
+inputs = ["microsoft_entra_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "identity/microsoft-entra",
+    "parser":        "microsoft-entra",
+    "parse_status":  "failed",
+    "parse_error":   "microsoft_entra_json_or_event_shape_invalid",
+    "raw":           .raw
+  }
+'''
+
+[sinks.microsoft_entra_quickwit_identity]
+type                = "http"
+inputs              = ["microsoft_entra_route_by_class.identity"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-identity/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.microsoft_entra_quickwit_identity.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.microsoft_entra_quickwit_audit]
+type                = "http"
+inputs              = ["microsoft_entra_route_by_class.audit"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-audit/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.microsoft_entra_quickwit_audit.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.microsoft_entra_quickwit_raw_failed]
+type                = "http"
+inputs              = ["microsoft_entra_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.microsoft_entra_quickwit_raw_failed.request]
+headers.Content-Type = "application/x-ndjson"
