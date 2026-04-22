@@ -1,0 +1,26 @@
+[[tests]]
+name = "Cloudflare HTTP — UnixNano timestamp and fallback URI"
+
+[[tests.inputs]]
+insert_at = "cloudflare_http_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"RayID":"9000000000000001","EdgeStartTimestamp":1721032499123456789,"ClientIP":"203.0.113.20","ClientRequestHost":"static.example.com","ClientRequestMethod":"HEAD","ClientRequestURI":"/assets/app.css","ClientRequestProtocol":"HTTP/1.1","ClientRequestScheme":"https","EdgeResponseStatus":304,"EdgeResponseBodyBytes":0,"OriginResponseStatus":304,"ClientRequestSource":"worker"}'
+
+[[tests.outputs]]
+extract_from = "cloudflare_http_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4002)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.time, 1721032499123)
+  assert_eq!(.http_request.http_method, "HEAD")
+  assert_eq!(.http_request.url.path, "/assets/app.css")
+  assert_eq!(.http_response.code, 304)
+  assert_eq!(.traffic.bytes_out, 0)
+  assert_eq!(.unmapped.origin_status, 304)
+  assert_eq!(.unmapped.request_source, "worker")
+'''

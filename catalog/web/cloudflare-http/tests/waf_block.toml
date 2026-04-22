@@ -1,0 +1,33 @@
+[[tests]]
+name = "Cloudflare HTTP — WAF block request"
+
+[[tests.inputs]]
+insert_at = "cloudflare_http_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"RayID":"8a1f2c3d4e5f6789","EdgeStartTimestamp":"2025-07-17T08:01:02Z","ClientIP":"198.51.100.23","ClientCountry":"FR","ClientASN":64501,"ClientRequestHost":"app.example.com","ClientRequestMethod":"POST","ClientRequestURI":"/login","ClientRequestPath":"/login","ClientRequestProtocol":"HTTP/3","ClientRequestScheme":"https","ClientRequestUserAgent":"curl/8.0","ClientRequestBytes":2048,"EdgeResponseStatus":403,"EdgeResponseBytes":128,"SecurityAction":"block","SecurityActions":["block"],"SecurityRuleIDs":["waf-001"],"SecuritySources":["waf"],"WAFAttackScore":12,"WAFSQLiAttackScore":8,"BotScore":4,"BotScoreSrc":"machine_learning","BotTags":["likely_automated"],"JA3Hash":"abc123"}'
+
+[[tests.outputs]]
+extract_from = "cloudflare_http_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4002)
+  assert_eq!(.severity_id, 3)
+  assert_eq!(.status, "Failure")
+  assert_eq!(.status_id, 2)
+  assert_eq!(.http_request.http_method, "POST")
+  assert_eq!(.http_response.code, 403)
+  assert_eq!(.src_endpoint.ip, "198.51.100.23")
+  assert_eq!(.unmapped.security_signal, true)
+  assert_eq!(.unmapped.security_action, "block")
+  assert_eq!(.unmapped.security_actions[0], "block")
+  assert_eq!(.unmapped.security_rule_ids[0], "waf-001")
+  assert_eq!(.unmapped.security_sources[0], "waf")
+  assert_eq!(.unmapped.bot_score, 4)
+  assert_eq!(.unmapped.waf_attack_score, 12)
+  assert_eq!(.unmapped.waf_sqli_score, 8)
+  assert_eq!(.unmapped.ja3_hash, "abc123")
+'''
