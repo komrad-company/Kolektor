@@ -21,7 +21,7 @@ pub enum ApiError {
     Database(#[from] sqlx::Error),
 
     #[error("internal error: {0}")]
-    Internal(#[from] anyhow::Error),
+    Internal(String),
 }
 
 impl IntoResponse for ApiError {

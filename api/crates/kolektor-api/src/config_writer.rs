@@ -1,17 +1,38 @@
-use anyhow::{Context, Result, bail};
 use kolektor_common::models::Parser;
 use std::collections::BTreeMap;
 use std::path::Path;
+use thiserror::Error;
 use tokio::fs;
 use toml::{Table, Value};
 use uuid::Uuid;
+
+#[derive(Debug, Error)]
+pub enum ConfigWriterError {
+    #[error("parsing TOML for {name}: {source}")]
+    TomlParse {
+        name: String,
+        #[source]
+        source: toml::de::Error,
+    },
+    #[error("component collision: {0}")]
+    ComponentCollision(String),
+    #[error("source address collision on {0}")]
+    AddressCollision(String),
+    #[error("serializing TOML: {0}")]
+    Serialize(#[from] toml::ser::Error),
+    #[error("writing config: {0}")]
+    Io(#[from] std::io::Error),
+}
 
 /// Assemble le contenu TOML Vector agrégé pour tous les parsers actifs.
 ///
 /// Stratégie : Parse chaque parser actif en `toml::Table`, puis fusionne
 /// les blocs `sources`, `transforms`, et `sinks`.
 /// Substitue `${DATASOURCE_ID}` par `<datasource_base>-<category>-<name>`.
-pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> Result<String> {
+pub fn assemble_toml(
+    parsers: &[Parser],
+    datasource_base: &str,
+) -> Result<String, ConfigWriterError> {
     let mut header = String::new();
     header.push_str("# Kolektor — config générée automatiquement, ne pas éditer à la main\n");
     header.push_str(&format!("# Parsers actifs : {}\n\n", parsers.len()));
@@ -40,8 +61,10 @@ pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> Result<String
         );
         let substituted = substitute_runtime_vars(parser, &ds_id);
 
-        let parsed: Table = toml::from_str(&substituted)
-            .with_context(|| format!("parsing TOML for parser {}", parser.source_type))?;
+        let parsed: Table = toml::from_str(&substituted).map_err(|e| ConfigWriterError::TomlParse {
+            name: parser.source_type.clone(),
+            source: e,
+        })?;
 
         for (root_key, root_val) in parsed {
             if !merged.contains_key(&root_key) {
@@ -52,11 +75,10 @@ pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> Result<String
                 if let Some(Value::Table(global_section)) = merged.get_mut(&root_key) {
                     for (component_name, component_val) in parser_section {
                         if global_section.contains_key(&component_name) {
-                            bail!(
-                                "component collision: [{}.{component_name}] from parser {} already exists",
-                                root_key,
-                                parser.source_type
-                            );
+                            return Err(ConfigWriterError::ComponentCollision(format!(
+                                "[{}.{component_name}] from parser {} already exists",
+                                root_key, parser.source_type
+                            )));
                         }
                         if root_key == "sources" {
                             detect_address_collision(
@@ -76,7 +98,7 @@ pub fn assemble_toml(parsers: &[Parser], datasource_base: &str) -> Result<String
         }
     }
 
-    let toml_str = toml::to_string(&merged).context("serializing merged TOML")?;
+    let toml_str = toml::to_string(&merged)?;
 
     Ok(format!("{}{}", header, toml_str))
 }
@@ -114,7 +136,7 @@ fn detect_address_collision(
     component_name: &str,
     component_val: &Value,
     source_type: &str,
-) -> Result<()> {
+) -> Result<(), ConfigWriterError> {
     let Some(address) = component_val
         .as_table()
         .and_then(|t| t.get("address"))
@@ -123,22 +145,21 @@ fn detect_address_collision(
         return Ok(());
     };
 
-    if let Some(existing) = source_addresses.insert(address.to_string(), component_name.to_string())
+    if let Some(existing) =
+        source_addresses.insert(address.to_string(), component_name.to_string())
     {
-        bail!(
-            "source address collision on {address}: {existing} and {component_name} ({source_type})"
-        );
+        return Err(ConfigWriterError::AddressCollision(format!(
+            "{address}: {existing} and {component_name} ({source_type})"
+        )));
     }
 
     Ok(())
 }
 
 /// Écrit le fichier cible de façon atomique (tmp + rename).
-pub async fn write_atomic(path: &Path, content: &str) -> Result<()> {
+pub async fn write_atomic(path: &Path, content: &str) -> Result<(), ConfigWriterError> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .await
-            .with_context(|| format!("creating parent dir {}", parent.display()))?;
+        fs::create_dir_all(parent).await?;
     }
 
     let file_name = path
@@ -146,13 +167,8 @@ pub async fn write_atomic(path: &Path, content: &str) -> Result<()> {
         .and_then(|f| f.to_str())
         .unwrap_or("sources.toml");
     let tmp = path.with_file_name(format!(".{file_name}.{}.tmp", Uuid::now_v7()));
-    fs::write(&tmp, content.as_bytes())
-        .await
-        .with_context(|| format!("writing {}", tmp.display()))?;
-
-    fs::rename(&tmp, path)
-        .await
-        .with_context(|| format!("renaming {} -> {}", tmp.display(), path.display()))?;
+    fs::write(&tmp, content.as_bytes()).await?;
+    fs::rename(&tmp, path).await?;
 
     Ok(())
 }

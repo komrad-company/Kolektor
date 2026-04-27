@@ -1,4 +1,3 @@
-use anyhow::{Context, Result};
 use base64::Engine;
 use chrono::{DateTime, Utc};
 use kolektor_common::db;
@@ -7,14 +6,14 @@ use uuid::Uuid;
 
 use crate::config::{TokenArgs, TokenCommand, TokenCreateArgs, TokenListArgs};
 
-pub async fn run(args: TokenArgs) -> Result<()> {
+pub async fn run(args: TokenArgs) -> Result<(), Box<dyn std::error::Error>> {
     match args.command {
         TokenCommand::Create(a) => create(a).await,
         TokenCommand::List(a) => list(a).await,
     }
 }
 
-async fn create(args: TokenCreateArgs) -> Result<()> {
+async fn create(args: TokenCreateArgs) -> Result<(), Box<dyn std::error::Error>> {
     let pool = db::connect(&args.database_url, 2).await?;
 
     let mut bytes = [0u8; 32];
@@ -23,7 +22,7 @@ async fn create(args: TokenCreateArgs) -> Result<()> {
     let secret = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
     let token = format!("klt_{}_{}", id.simple(), secret);
 
-    let hash = bcrypt::hash(&token, bcrypt::DEFAULT_COST).context("hashing token with bcrypt")?;
+    let hash = bcrypt::hash(&token, bcrypt::DEFAULT_COST)?;
     sqlx::query(
         "INSERT INTO kolektor.api_tokens (id, name, token_hash, tenant_id) \
          VALUES ($1, $2, $3, $4)",
@@ -47,7 +46,7 @@ async fn create(args: TokenCreateArgs) -> Result<()> {
     Ok(())
 }
 
-async fn list(args: TokenListArgs) -> Result<()> {
+async fn list(args: TokenListArgs) -> Result<(), Box<dyn std::error::Error>> {
     let pool = db::connect(&args.database_url, 2).await?;
 
     type TokenListRow = (Uuid, String, String, Option<DateTime<Utc>>, DateTime<Utc>);

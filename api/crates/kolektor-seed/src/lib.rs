@@ -1,9 +1,29 @@
-use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::PgPool;
 use std::path::{Path, PathBuf};
+use thiserror::Error;
 use uuid::Uuid;
+
+#[derive(Debug, Error)]
+pub enum SeedError {
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("parsing yaml {path}: {source}")]
+    ParseYaml {
+        path: String,
+        #[source]
+        source: serde_yaml::Error,
+    },
+    #[error("serializing ocsf_outputs: {0}")]
+    Serialize(#[from] serde_json::Error),
+    #[error("upserting parser {name}: {source}")]
+    Upsert {
+        name: String,
+        #[source]
+        source: sqlx::Error,
+    },
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Manifest {
@@ -38,12 +58,10 @@ pub struct CatalogParser {
 }
 
 /// Scanne le répertoire catalog et retourne la liste des parsers détectés.
-pub fn scan_catalog(catalog_dir: &Path) -> Result<Vec<CatalogParser>> {
+pub fn scan_catalog(catalog_dir: &Path) -> Result<Vec<CatalogParser>, SeedError> {
     let mut parsers = Vec::new();
 
-    for category_entry in std::fs::read_dir(catalog_dir)
-        .with_context(|| format!("reading catalog dir {}", catalog_dir.display()))?
-    {
+    for category_entry in std::fs::read_dir(catalog_dir)? {
         let category_entry = category_entry?;
         if !category_entry.file_type()?.is_dir() {
             continue;
@@ -91,15 +109,17 @@ fn parse_parser_dir(
     parser_dir: &Path,
     vector_toml_path: &Path,
     manifest_path: &Path,
-) -> Result<CatalogParser> {
-    let vector_toml = std::fs::read_to_string(vector_toml_path)
-        .with_context(|| format!("reading {}", vector_toml_path.display()))?;
+) -> Result<CatalogParser, SeedError> {
+    let vector_toml = std::fs::read_to_string(vector_toml_path)?;
 
-    let manifest_content = std::fs::read_to_string(manifest_path)
-        .with_context(|| format!("reading manifest {}", manifest_path.display()))?;
+    let manifest_content = std::fs::read_to_string(manifest_path)?;
 
-    let manifest: Manifest = serde_yaml::from_str(&manifest_content)
-        .with_context(|| format!("parsing yaml {}", manifest_path.display()))?;
+    let manifest: Manifest = serde_yaml::from_str(&manifest_content).map_err(|e| {
+        SeedError::ParseYaml {
+            path: manifest_path.display().to_string(),
+            source: e,
+        }
+    })?;
 
     let source_type = format!("{category}/{name}");
     let outputs = normalized_outputs(&manifest);
@@ -120,7 +140,7 @@ fn parse_parser_dir(
         ocsf_class_uid: primary.as_ref().map(|o| o.class_uid),
         ocsf_category_uid: primary.as_ref().map(|o| o.category_uid),
         ocsf_index,
-        ocsf_outputs: serde_json::to_value(outputs).context("serializing ocsf_outputs")?,
+        ocsf_outputs: serde_json::to_value(outputs)?,
         vector_toml,
         description,
     })
@@ -196,7 +216,7 @@ fn read_description(parser_dir: &Path) -> Option<String> {
 
 /// Insère / met à jour les parsers en DB. Préserve `enabled`.
 /// Incrémente `version` uniquement si `vector_toml` change.
-pub async fn seed(pool: &PgPool, catalog_dir: &Path) -> Result<SeedReport> {
+pub async fn seed(pool: &PgPool, catalog_dir: &Path) -> Result<SeedReport, SeedError> {
     let parsers = scan_catalog(catalog_dir)?;
     let mut report = SeedReport::default();
 
@@ -242,7 +262,10 @@ pub async fn seed(pool: &PgPool, catalog_dir: &Path) -> Result<SeedReport> {
         .bind(&parser.description)
         .fetch_one(pool)
         .await
-        .with_context(|| format!("upserting parser {}", parser.source_type))?;
+        .map_err(|e| SeedError::Upsert {
+            name: parser.source_type.clone(),
+            source: e,
+        })?;
 
         if inserted {
             report.inserted += 1;

@@ -1,7 +1,6 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use anyhow::Result;
 use axum::{
     Router, middleware as axum_middleware,
     routing::{get, put},
@@ -14,7 +13,7 @@ use crate::middleware;
 use crate::routes;
 use crate::state::AppState;
 
-pub async fn run(args: ServeArgs) -> Result<()> {
+pub async fn run(args: ServeArgs) -> Result<(), Box<dyn std::error::Error>> {
     let datasource_base = std::env::var("DATASOURCE_ID")
         .or_else(|_| std::env::var("DATASOURCE_ID_BASE"))
         .unwrap_or_else(|_| "ds".to_string());

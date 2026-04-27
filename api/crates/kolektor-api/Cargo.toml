@@ -24,9 +24,8 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+khronika = { workspace = true }
 thiserror = { workspace = true }
-anyhow = { workspace = true }
 bcrypt = { workspace = true }
 rand = { workspace = true }
 base64 = { workspace = true }
