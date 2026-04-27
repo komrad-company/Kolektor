@@ -1,12 +1,11 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
 use kolektor_common::{db, models::Parser};
 
 use crate::config::InitArgs;
 use crate::config_writer;
 
-pub async fn run(args: InitArgs) -> Result<()> {
+pub async fn run(args: InitArgs) -> Result<(), Box<dyn std::error::Error>> {
     let datasource_base = std::env::var("DATASOURCE_ID")
         .or_else(|_| std::env::var("DATASOURCE_ID_BASE"))
         .unwrap_or_else(|_| "ds".to_string());

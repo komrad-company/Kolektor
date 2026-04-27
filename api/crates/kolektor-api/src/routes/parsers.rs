@@ -148,8 +148,11 @@ pub async fn put_enabled(
     .fetch_all(&mut *tx)
     .await?;
 
-    let content = config_writer::assemble_toml(&active, &state.datasource_base)?;
-    config_writer::write_atomic(&state.vector_output, &content).await?;
+    let content = config_writer::assemble_toml(&active, &state.datasource_base)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    config_writer::write_atomic(&state.vector_output, &content)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let event_type = if body.enabled {
         "parser_enabled"

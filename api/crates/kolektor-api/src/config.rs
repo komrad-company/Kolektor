@@ -1,5 +1,4 @@
 use clap::{Parser, Subcommand};
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser, Debug)]
 #[command(version, about = "Kolektor — API REST + init binaire")]
@@ -10,10 +9,6 @@ pub struct Cli {
     /// Niveau de log
     #[arg(long, default_value = "info", env = "LOG_LEVEL", global = true)]
     pub log_level: String,
-
-    /// Format de log : json | pretty
-    #[arg(long, default_value = "json", env = "LOG_FORMAT", global = true)]
-    pub log_format: String,
 }
 
 #[derive(Subcommand, Debug)]
@@ -96,12 +91,3 @@ pub struct ServeArgs {
     pub vector_output: String,
 }
 
-pub fn init_tracing(cli: &Cli) {
-    let env_filter = EnvFilter::try_new(&cli.log_level).unwrap_or_else(|_| EnvFilter::new("info"));
-    let registry = tracing_subscriber::registry().with(env_filter);
-    if cli.log_format == "json" {
-        registry.with(fmt::layer().json()).init();
-    } else {
-        registry.with(fmt::layer().pretty()).init();
-    }
-}
