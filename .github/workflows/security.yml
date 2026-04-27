@@ -19,7 +19,7 @@ permissions:
 jobs:
   gitleaks:
     name: gitleaks (secrets)
-    runs-on: ubuntu-latest
+    runs-on: komrad-runners
     steps:
       - uses: actions/checkout@v5
         with:
@@ -45,7 +45,7 @@ jobs:
 
   hadolint:
     name: hadolint (Dockerfile misconfig)
-    runs-on: ubuntu-latest
+    runs-on: komrad-runners
     steps:
       - uses: actions/checkout@v5
       - uses: hadolint/hadolint-action@v3.3.0
@@ -73,7 +73,7 @@ jobs:
 
   grype-image:
     name: grype image
-    runs-on: ubuntu-latest
+    runs-on: komrad-runners
     steps:
       - uses: actions/checkout@v5
       - name: Build image
@@ -107,7 +107,7 @@ jobs:
 
   cargo-audit:
     name: cargo audit (RustSec)
-    runs-on: ubuntu-latest
+    runs-on: komrad-runners
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
@@ -126,7 +126,7 @@ jobs:
 
   cargo-deny:
     name: cargo deny (licences + bans + advisories)
-    runs-on: ubuntu-latest
+    runs-on: komrad-runners
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
