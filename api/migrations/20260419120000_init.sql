@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS kolektor.parsers (
     ocsf_class_uid     INT,
     ocsf_category_uid  INT,
     ocsf_index         TEXT,
-    ocsf_outputs       JSONB NOT NULL DEFAULT '[]'::jsonb,
     vector_toml        TEXT NOT NULL,
     description        TEXT,
     built_in           BOOLEAN NOT NULL DEFAULT true,
