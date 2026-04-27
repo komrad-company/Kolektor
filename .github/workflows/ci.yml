@@ -7,145 +7,26 @@ on:
     branches: [main]
 
 env:
-  VECTOR_IMAGE: timberio/vector:0.54.0-debian
-  RUST_VERSION: "1.94"
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/komrad-company/kolektor
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  # ── Vector catalog CI ─────────────────────────────────────────────────────────
+  vector:
+    uses: komrad-company/workflows/.github/workflows/vector-checks.yml@main
+    with:
+      vector-image: timberio/vector:0.54.0-debian
 
-  validate:
-    runs-on: komrad-runners
-    container:
-      image: timberio/vector:0.54.0-debian
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate Vector configs
-        run: |
-          chmod +x ci/validate.sh
-          ci/validate.sh
-      - name: Upload validate results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: validate-results
-          path: ci/results/
+  rust:
+    uses: komrad-company/workflows/.github/workflows/rust-checks.yml@main
+    with:
+      rust-version: "1.94"
+      working-directory: api
+      workspace: true
 
-  test:
-    runs-on: komrad-runners
-    container:
-      image: timberio/vector:0.54.0-debian
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run Vector tests
-        run: |
-          chmod +x ci/test.sh
-          ci/test.sh
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: ci/results/
-
-  coverage:
-    runs-on: komrad-runners
-    container:
-      image: timberio/vector:0.54.0-debian
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check coverage
-        run: |
-          chmod +x ci/coverage.sh
-          ci/coverage.sh
-
-  report:
-    runs-on: komrad-runners
-    needs: [validate, test]
-    if: always()
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download validate results
-        uses: actions/download-artifact@v4
-        with:
-          name: validate-results
-          path: ci/results/
-      - name: Download test results
-        uses: actions/download-artifact@v4
-        with:
-          name: test-results
-          path: ci/results/
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Generate report
-        run: python ci/report.py
-      - name: Upload report
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-report
-          path: ci/results/report.md
-
-  # ── Rust API CI ───────────────────────────────────────────────────────────────
-
-  rust-checks:
-    name: Rust Lint, Test & Build
-    runs-on: komrad-runners
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: rustfmt, clippy
-          
-      # Utilisation d'une action dédiée au cache Rust (plus robuste que actions/cache)
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: api -> target
-          
-      - name: Format Check
-        run: cd api && cargo fmt --check
-        
-      - name: Clippy
-        run: cd api && cargo clippy --workspace -- -D warnings
-        
-      - name: Run Tests
-        run: cd api && cargo test --workspace
-        
-      - name: Test Release Build
-        run: cd api && cargo build --release
-
-  # ── Docker image & Security ───────────────────────────────────────────────────
-
-  build:
-    runs-on: komrad-runners
-    needs: [validate, test, coverage, rust-checks]
+  publish:
+    needs: [vector, rust]
     if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        id: docker_build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ env.IMAGE_NAME }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+    uses: komrad-company/workflows/.github/workflows/docker-publish.yml@main
+    with:
+      context: .
+      image: ghcr.io/komrad-company/kolektor
+    secrets: inherit
