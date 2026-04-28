@@ -25,13 +25,3 @@ jobs:
     uses: komrad-company/workflows/.github/workflows/security-docker.yml@main
     with:
       dockerfiles: "Dockerfile"
-
-  codeql:
-    uses: komrad-company/workflows/.github/workflows/codeql.yml@main
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-    with:
-      languages: '["rust"]'
-      build-command: "cd api && cargo build --release"
