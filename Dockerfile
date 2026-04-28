@@ -5,9 +5,8 @@ FROM rust:1.94-slim AS builder
 
 WORKDIR /app
 
-# hadolint ignore=DL3008
 RUN apt-get update \
- && apt-get install -y --no-install-recommends pkg-config \
+ && apt-get install -y --no-install-recommends pkg-config=1.8.1-4 \
  && rm -rf /var/lib/apt/lists/*
 
 # Cache des dépendances : copy manifests + stub main puis build pour remplir ~/.cargo
@@ -35,9 +34,7 @@ RUN touch crates/kolektor-api/src/main.rs \
 # ==============================================================================
 FROM timberio/vector:0.54.0-debian
 
-# Patch des CVEs OS (openssl, libc, dpkg...) — l'image Vector upstream n'est
-# pas rebuild à chaque advisory Debian, donc on applique les security patches.
-# hadolint ignore=DL3005
+# Patch des CVEs OS — voir .hadolint.yaml pour la justification de DL3005.
 RUN apt-get update \
  && apt-get upgrade -y \
  && rm -rf /var/lib/apt/lists/*
@@ -45,18 +42,11 @@ RUN apt-get update \
 LABEL maintainer="Benoit Caillabet"
 LABEL description="Vector.dev + kolektor-api REST backend"
 
-# Catalog de parsers (lu par `kolektor-api init` pour seeder la DB)
 COPY catalog/ /etc/vector/catalog/
-
-# Binaire Rust + migrations sqlx
 COPY --from=builder /app/target/release/kolektor-api /usr/local/bin/kolektor-api
 COPY --from=builder /app/migrations /etc/kolektor/migrations
-
-# Entrypoint legacy conservé en fallback pour deployments mono-source
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Vector sert uniquement de runtime ; l'entrypoint est choisi par le manifest K8s
-# (kolektor-api init / serve / token) ou via /entrypoint.sh pour le legacy.
 ENTRYPOINT []
 CMD ["/usr/local/bin/kolektor-api", "--help"]
