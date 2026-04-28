@@ -25,6 +25,9 @@ jobs:
   publish:
     needs: [vector, rust]
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
     uses: komrad-company/workflows/.github/workflows/docker-publish.yml@main
     with:
       context: .
