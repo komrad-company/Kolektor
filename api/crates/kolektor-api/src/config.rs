@@ -90,4 +90,3 @@ pub struct ServeArgs {
     )]
     pub vector_output: String,
 }
-

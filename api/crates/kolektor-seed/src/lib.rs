@@ -114,12 +114,11 @@ fn parse_parser_dir(
 
     let manifest_content = std::fs::read_to_string(manifest_path)?;
 
-    let manifest: Manifest = serde_yaml::from_str(&manifest_content).map_err(|e| {
-        SeedError::ParseYaml {
+    let manifest: Manifest =
+        serde_yaml::from_str(&manifest_content).map_err(|e| SeedError::ParseYaml {
             path: manifest_path.display().to_string(),
             source: e,
-        }
-    })?;
+        })?;
 
     let source_type = format!("{category}/{name}");
     let outputs = normalized_outputs(&manifest);
