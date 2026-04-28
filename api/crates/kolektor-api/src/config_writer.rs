@@ -61,10 +61,11 @@ pub fn assemble_toml(
         );
         let substituted = substitute_runtime_vars(parser, &ds_id);
 
-        let parsed: Table = toml::from_str(&substituted).map_err(|e| ConfigWriterError::TomlParse {
-            name: parser.source_type.clone(),
-            source: e,
-        })?;
+        let parsed: Table =
+            toml::from_str(&substituted).map_err(|e| ConfigWriterError::TomlParse {
+                name: parser.source_type.clone(),
+                source: e,
+            })?;
 
         for (root_key, root_val) in parsed {
             if !merged.contains_key(&root_key) {
@@ -145,8 +146,7 @@ fn detect_address_collision(
         return Ok(());
     };
 
-    if let Some(existing) =
-        source_addresses.insert(address.to_string(), component_name.to_string())
+    if let Some(existing) = source_addresses.insert(address.to_string(), component_name.to_string())
     {
         return Err(ConfigWriterError::AddressCollision(format!(
             "{address}: {existing} and {component_name} ({source_type})"
