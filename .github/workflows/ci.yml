@@ -21,6 +21,7 @@ jobs:
     uses: komrad-company/workflows/.github/workflows/vector-checks.yml@main
     with:
       vector-image: timberio/vector:0.54.0-debian
+    secrets: inherit
 
   rust:
     uses: komrad-company/workflows/.github/workflows/rust-checks.yml@main
