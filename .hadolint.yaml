@@ -1,0 +1,7 @@
+# Règles hadolint ignorées volontairement — chaque exception est justifiée.
+ignore:
+  - DL3005
+  # DL3005 : apt-get upgrade interdit car non-reproductible.
+  # Exception : l'image base timberio/vector:0.54.0-debian n'est pas rebuildée
+  # à chaque CVE Debian. On upgrade intentionnellement pour patcher les vulns OS.
+  # Le scan grype en aval vérifie qu'aucune CVE HIGH+fixable ne subsiste.
