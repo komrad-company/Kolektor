@@ -5,6 +5,7 @@ FROM rust:1.94-slim AS builder
 
 WORKDIR /app
 
+# hadolint ignore=DL3008
 RUN apt-get update \
  && apt-get install -y --no-install-recommends pkg-config \
  && rm -rf /var/lib/apt/lists/*
@@ -36,6 +37,7 @@ FROM timberio/vector:0.54.0-debian
 
 # Patch des CVEs OS (openssl, libc, dpkg...) — l'image Vector upstream n'est
 # pas rebuild à chaque advisory Debian, donc on applique les security patches.
+# hadolint ignore=DL3005
 RUN apt-get update \
  && apt-get upgrade -y \
  && rm -rf /var/lib/apt/lists/*
