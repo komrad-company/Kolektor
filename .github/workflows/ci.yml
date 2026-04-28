@@ -9,6 +9,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  packages: write
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -28,9 +32,6 @@ jobs:
   publish:
     needs: [vector, rust]
     if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
     uses: komrad-company/workflows/.github/workflows/docker-publish.yml@main
     with:
       context: .
