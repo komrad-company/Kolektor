@@ -1,6 +1,6 @@
 # CI — Architecture d'exécution
 
-Trois workflows GitHub Actions indépendants, déclenchés en parallèle.
+Deux workflows GitHub Actions indépendants, déclenchés en parallèle sur `komrad-runners` (ARC K8s self-hosted).
 
 ## 1. `ci.yml` — Build & Publish
 
@@ -8,42 +8,37 @@ Chemin critique : si un maillon casse, pas d'image publiée.
 
 ```
 validate (Vector) ──┐
-test (Vector)       ├── build (Docker push GHCR) [main only]
+test (Vector)       ├── publish (Docker push GHCR) [main only]
 coverage (Vector)   │
 rust-checks ────────┘
                     └── report (rapport markdown Vector)
 ```
 
-- **Jobs Vector** (`validate`, `test`, `coverage`, `report`) : scripts `ci/*.sh`, image `timberio/vector:0.54.0-debian`
+- **Jobs Vector** (`validate`, `test`, `coverage`, `report`) : scripts `ci/*.sh`, conteneur `timberio/vector:0.54.0-debian` (via `container:` job). `secrets: inherit` requis pour l'auth Docker Hub sur le pull de l'image.
 - **rust-checks** : `cargo fmt --check` + `cargo clippy --workspace -- -D warnings` + `cargo test --workspace` + `cargo build --release` (Rust 1.94, edition 2024, cache `Swatinem/rust-cache`)
-- **build** : `docker/build-push-action@v6` → `ghcr.io/komrad-company/kolektor:{sha,latest}`, déclenché uniquement sur `main`
+- **publish** : `docker/build-push-action@v6` → `ghcr.io/komrad-company/kolektor:{sha,latest}`, déclenché uniquement sur `main`
 
 ## 2. `security.yml` — SAST
 
-Jobs **indépendants** (pas de `needs:` entre eux), tournent en parallèle.
+Jobs **indépendants** (pas de `needs:` entre eux), tournent en parallèle. `cancel-in-progress: false` (les scans sont longs, on ne les interrompt pas).
 
-| Job | Gate | Config |
+| Job | Workflow réutilisable | Gate |
 |---|---|---|
-| `gitleaks` | exit-code 1 | — |
-| `hadolint` | failure-threshold: error | `Dockerfile` racine |
-| `grype image` | HIGH+, only-fixed | `anchore/scan-action@v7.4.0` |
-| `cargo-audit` | RustSec fail | `api/.cargo/audit.toml` |
-| `cargo-deny` | licences + bans + advisories | `api/deny.toml` |
+| `secrets` | `security-secrets.yml` (gitleaks) | exit-code 1 |
+| `rust` | `security-rust.yml` (cargo-audit + cargo-deny) | RustSec fail / licences + bans |
+| `docker` | `security-docker.yml` (hadolint + grype) | hadolint error / grype HIGH+ only-fixed |
+
+`security-docker.yml` : hadolint v2.12.0 (binaire direct) + grype v0.87.0 (binaire direct) sur l'image buildée depuis `Dockerfile`. Auth Docker Hub via `secrets: inherit` (`DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN`).
+
+Exceptions hadolint documentées dans `.hadolint.yaml` à la racine.
 
 Déclencheurs : `push main`, `pull_request`, cron `0 3 * * 1` (lundi 3h UTC), `workflow_dispatch`.
 
-Chaque job uploade un artifact de reporting (SARIF + JSON), rétention 30j.
+## Conventions
 
-## 3. `codeql.yml` (géré GitHub)
-
-Analyse statique Rust + JS, indépendante. Upload SARIF dans l'onglet Security.
-
-## Conventions partagées avec Kontrol
-
-- `RUST_VERSION: "1.94"` (env var)
-- `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` (contourne deprecation Node 20 des actions GA)
+- `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` : force l'exécution des actions JS sur Node 24 (warning cosmétique tant que les actions n'ont pas mis à jour leur `action.yml`)
 - `actions/checkout@v5`, `actions/upload-artifact@v5`
-- Même version Grype (`anchore/scan-action@v7.4.0`), même format hadolint (SARIF + JSON)
+- Runners : `komrad-runners` (ARC, DinD manuel, `--mtu=1380` pour Cilium WireGuard)
 
 ## Ignores advisories documentés
 

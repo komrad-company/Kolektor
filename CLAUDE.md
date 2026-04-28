@@ -67,7 +67,8 @@ Usage : `curl -H "Authorization: Bearer <token>" https://kolektor-api.example.co
 - `vector validate` sur chaque `vector.toml` (avec dummy env vars injectes par `ci/validate.sh`)
 - `vector test` sur chaque source (merge vector.toml + tests/*.toml)
 - Rapport markdown en artifact
-- Image CI : `timberio/vector:0.54.0-debian`
+- Image CI : `timberio/vector:0.54.0-debian` (container: job, `secrets: inherit` requis pour Docker Hub)
+- SAST : gitleaks + cargo-audit/deny + hadolint + grype (voir `docs/CI.md`)
 
 ## Pieges connus
 - `vector test` necessite que les tests soient dans le meme fichier ou passes en argument avec le config
