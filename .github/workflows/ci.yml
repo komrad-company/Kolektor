@@ -26,7 +26,6 @@ jobs:
   rust:
     uses: komrad-company/workflows/.github/workflows/rust-checks.yml@main
     with:
-      rust-version: "1.94"
       working-directory: api
       workspace: true
 
