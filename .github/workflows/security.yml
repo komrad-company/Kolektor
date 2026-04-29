@@ -18,9 +18,6 @@ jobs:
 
   rust:
     uses: komrad-company/workflows/.github/workflows/security-rust.yml@main
-    with:
-      working-directory: api
-
   docker:
     uses: komrad-company/workflows/.github/workflows/security-docker.yml@main
     with:
