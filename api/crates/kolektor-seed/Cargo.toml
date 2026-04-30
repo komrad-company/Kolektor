@@ -6,7 +6,7 @@ license.workspace = true
 description = "Import du catalog Git (TOML Vector) vers la DB Kolektor"
 
 [dependencies]
-kolektor-common = { path = "../kolektor-common" }
+kolektor-common = { version = "0.1.0", path = "../kolektor-common" }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }

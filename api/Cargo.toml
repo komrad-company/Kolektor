@@ -24,7 +24,6 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env"] }
 tracing = "0.1"
 thiserror = "2"
-khronika = { git = "https://github.com/komrad-company/Khronika.git" }
 toml = "0.8"
 regex = "1"
 bcrypt = "0.15"

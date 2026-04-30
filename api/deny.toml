@@ -23,7 +23,8 @@ allow = [
     "CC0-1.0",
     "MPL-2.0",
     "0BSD",
-    "AGPL-3.0",
+    "AGPL-3.0-or-later",
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.93
 
@@ -36,3 +37,4 @@ highlight = "all"
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = ["https://github.com/komrad-company/Khronika.git"]

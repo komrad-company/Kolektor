@@ -10,8 +10,8 @@ name = "kolektor-api"
 path = "src/main.rs"
 
 [dependencies]
-kolektor-common = { path = "../kolektor-common" }
-kolektor-seed = { path = "../kolektor-seed" }
+kolektor-common = { version = "0.1.0", path = "../kolektor-common" }
+kolektor-seed = { version = "0.1.0", path = "../kolektor-seed" }
 
 tokio = { workspace = true }
 axum = { workspace = true }
@@ -24,7 +24,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
-khronika = { workspace = true }
+khronika = { version = "0.1.0", git = "https://github.com/komrad-company/Khronika.git" }
 thiserror = { workspace = true }
 bcrypt = { workspace = true }
 rand = { workspace = true }
