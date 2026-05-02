@@ -1,3 +1,5 @@
+use std::path::{Component, Path as FsPath};
+
 use axum::{
     Json,
     extract::{Path, Query, State},
@@ -11,6 +13,8 @@ use crate::error::ApiError;
 use crate::state::AppState;
 
 const ALLOWED_PROVIDERS: &[&str] = &["microsoft_graph", "microsoft365_management", "s3"];
+const FETCHER_OUTPUT_BASE_DIR: &str = "/var/lib/kolektor/fetcher";
+const REDACTED_SECRET: &str = "[REDACTED]";
 
 #[derive(Debug, Deserialize, Default)]
 pub struct ListQuery {
@@ -74,7 +78,7 @@ impl From<Fetcher> for FetcherSummary {
             enabled: f.enabled,
             interval_seconds: f.interval_seconds,
             output_path: f.output_path,
-            config: f.config,
+            config: redact_inline_secrets(f.config),
             state: f.state,
             last_attempt_at: f.last_attempt_at,
             last_success_at: f.last_success_at,
@@ -134,6 +138,10 @@ pub async fn create(
 ) -> Result<Json<FetcherSummary>, ApiError> {
     validate_provider(&body.provider)?;
     validate_interval(body.interval_seconds.unwrap_or(300))?;
+    validate_output_path(&body.output_path)?;
+    if let Some(config) = &body.config {
+        validate_config_no_inline_secrets(config)?;
+    }
 
     ensure_parser_exists(&state, &body.parser_source_type).await?;
 
@@ -175,6 +183,16 @@ pub async fn update(
         .unwrap_or(current.parser_source_type);
     ensure_parser_exists(&state, &parser_source_type).await?;
 
+    let output_path = body.output_path.unwrap_or(current.output_path);
+    validate_output_path(&output_path)?;
+
+    let config = if let Some(config) = body.config {
+        validate_config_no_inline_secrets(&config)?;
+        config
+    } else {
+        current.config
+    };
+
     let updated: Fetcher = sqlx::query_as(
         "UPDATE kolektor.fetchers SET
             name = $2,
@@ -196,8 +214,8 @@ pub async fn update(
     .bind(parser_source_type)
     .bind(body.enabled.unwrap_or(current.enabled))
     .bind(interval_seconds)
-    .bind(body.output_path.unwrap_or(current.output_path))
-    .bind(body.config.unwrap_or(current.config))
+    .bind(output_path)
+    .bind(config)
     .bind(body.state.unwrap_or(current.state))
     .fetch_one(&state.pool)
     .await?;
@@ -282,5 +300,148 @@ fn validate_interval(interval_seconds: i32) -> Result<(), ApiError> {
         Err(ApiError::BadRequest(
             "interval_seconds must be >= 30".to_string(),
         ))
+    }
+}
+
+fn validate_output_path(output_path: &str) -> Result<(), ApiError> {
+    let path = FsPath::new(output_path);
+    let base = FsPath::new(FETCHER_OUTPUT_BASE_DIR);
+    let has_parent_dir = path
+        .components()
+        .any(|component| matches!(component, Component::ParentDir));
+
+    if path.is_absolute()
+        && path.starts_with(base)
+        && path != base
+        && !has_parent_dir
+        && path.file_name().is_some()
+    {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(format!(
+            "output_path must be an absolute file path under {FETCHER_OUTPUT_BASE_DIR}"
+        )))
+    }
+}
+
+fn validate_config_no_inline_secrets(config: &Value) -> Result<(), ApiError> {
+    if let Some(key) = find_inline_secret_key(config) {
+        Err(ApiError::BadRequest(format!(
+            "config contains inline secret {key:?}; use an environment variable reference instead"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+fn find_inline_secret_key(value: &Value) -> Option<&'static str> {
+    match value {
+        Value::Object(map) => map.iter().find_map(|(key, value)| {
+            inline_secret_key(key).or_else(|| find_inline_secret_key(value))
+        }),
+        Value::Array(values) => values.iter().find_map(find_inline_secret_key),
+        _ => None,
+    }
+}
+
+fn inline_secret_key(key: &str) -> Option<&'static str> {
+    match key {
+        "access_key_id" => Some("access_key_id"),
+        "client_secret" => Some("client_secret"),
+        "secret_access_key" => Some("secret_access_key"),
+        "session_token" => Some("session_token"),
+        _ => None,
+    }
+}
+
+fn redact_inline_secrets(value: Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(key, value)| {
+                    let value = if inline_secret_key(&key).is_some() {
+                        Value::String(REDACTED_SECRET.to_string())
+                    } else {
+                        redact_inline_secrets(value)
+                    };
+                    (key, value)
+                })
+                .collect(),
+        ),
+        Value::Array(values) => {
+            Value::Array(values.into_iter().map(redact_inline_secrets).collect())
+        }
+        value => value,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    #[test]
+    fn output_path_must_stay_under_fetcher_dir() {
+        assert!(validate_output_path("/var/lib/kolektor/fetcher/microsoft-entra.jsonl").is_ok());
+        assert!(validate_output_path("/tmp/microsoft-entra.jsonl").is_err());
+        assert!(validate_output_path("/var/lib/kolektor/fetcher/../escape.jsonl").is_err());
+    }
+
+    #[test]
+    fn inline_secret_config_is_rejected() {
+        let config = json!({
+            "tenant_id": "tenant",
+            "client_id": "client",
+            "client_secret": "literal-secret"
+        });
+
+        assert!(validate_config_no_inline_secrets(&config).is_err());
+    }
+
+    #[test]
+    fn env_secret_reference_is_allowed() {
+        let config = json!({
+            "tenant_id": "tenant",
+            "client_id": "client",
+            "client_secret_env": "MSGRAPH_CLIENT_SECRET"
+        });
+
+        assert!(validate_config_no_inline_secrets(&config).is_ok());
+    }
+
+    #[test]
+    fn legacy_inline_secrets_are_redacted_from_summary() {
+        let fetcher = Fetcher {
+            id: Uuid::now_v7(),
+            name: "entra".to_string(),
+            provider: "microsoft_graph".to_string(),
+            parser_source_type: "identity/microsoft-entra".to_string(),
+            enabled: true,
+            interval_seconds: 300,
+            output_path: "/var/lib/kolektor/fetcher/microsoft-entra.jsonl".to_string(),
+            config: json!({
+                "client_id": "client",
+                "client_secret": "literal-secret",
+                "client_secret_env": "MSGRAPH_CLIENT_SECRET"
+            }),
+            state: json!({}),
+            last_attempt_at: None,
+            last_success_at: None,
+            last_error: None,
+            version: 1,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let summary = FetcherSummary::from(fetcher);
+
+        assert_eq!(
+            summary.config["client_secret"],
+            Value::String("[REDACTED]".to_string())
+        );
+        assert_eq!(
+            summary.config["client_secret_env"],
+            Value::String("MSGRAPH_CLIENT_SECRET".to_string())
+        );
     }
 }

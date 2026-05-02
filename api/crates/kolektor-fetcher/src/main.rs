@@ -1,4 +1,10 @@
-use std::{collections::BTreeMap, env, io::Read, path::Path, time::Duration};
+use std::{
+    collections::BTreeMap,
+    env,
+    io::Read,
+    path::{Component, Path},
+    time::Duration,
+};
 
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
@@ -15,6 +21,8 @@ use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 use uuid::Uuid;
+
+const FETCHER_OUTPUT_BASE_DIR: &str = "/var/lib/kolektor/fetcher";
 
 #[derive(Parser, Debug)]
 #[command(version, about = "Kolektor pull fetcher for cloud/SaaS logs")]
@@ -607,7 +615,7 @@ fn event_time(event: &Value, field: &str) -> Option<DateTime<Utc>> {
 }
 
 fn format_graph_time(ts: DateTime<Utc>) -> String {
-    ts.to_rfc3339_opts(SecondsFormat::Secs, true)
+    ts.to_rfc3339_opts(SecondsFormat::AutoSi, true)
 }
 
 async fn append_values(path: &str, values: &[Value]) -> Result<()> {
@@ -619,6 +627,8 @@ async fn append_lines(path: &str, lines: &[String]) -> Result<()> {
     if lines.is_empty() {
         return Ok(());
     }
+
+    validate_output_path(path)?;
 
     if let Some(parent) = Path::new(path).parent()
         && !parent.as_os_str().is_empty()
@@ -639,6 +649,25 @@ async fn append_lines(path: &str, lines: &[String]) -> Result<()> {
     }
     file.flush().await?;
     Ok(())
+}
+
+fn validate_output_path(output_path: &str) -> Result<()> {
+    let path = Path::new(output_path);
+    let base = Path::new(FETCHER_OUTPUT_BASE_DIR);
+    let has_parent_dir = path
+        .components()
+        .any(|component| matches!(component, Component::ParentDir));
+
+    if path.is_absolute()
+        && path.starts_with(base)
+        && path != base
+        && !has_parent_dir
+        && path.file_name().is_some()
+    {
+        Ok(())
+    } else {
+        bail!("output_path must be an absolute file path under {FETCHER_OUTPUT_BASE_DIR}")
+    }
 }
 
 async fn record_attempt(pool: &PgPool, id: Uuid) -> Result<()> {
@@ -805,6 +834,13 @@ mod tests {
     }
 
     #[test]
+    fn output_path_must_stay_under_fetcher_dir() {
+        assert!(validate_output_path("/var/lib/kolektor/fetcher/microsoft-entra.jsonl").is_ok());
+        assert!(validate_output_path("/tmp/microsoft-entra.jsonl").is_err());
+        assert!(validate_output_path("/var/lib/kolektor/fetcher/../escape.jsonl").is_err());
+    }
+
+    #[test]
     fn publisher_identifier_is_appended_when_present() {
         let mut url = Url::parse("https://manage.office.com/api/v1.0/t/activity/feed/subscriptions/content?contentType=Audit.General").unwrap();
 
@@ -827,6 +863,15 @@ mod tests {
             .with_timezone(&Utc);
 
         assert_eq!(format_graph_time(dt), "2026-04-22T10:00:00Z");
+    }
+
+    #[test]
+    fn format_graph_time_preserves_millisecond_cursor() {
+        let dt = DateTime::parse_from_rfc3339("2026-04-22T10:00:00.001+00:00")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        assert_eq!(format_graph_time(dt), "2026-04-22T10:00:00.001Z");
     }
 
     #[test]

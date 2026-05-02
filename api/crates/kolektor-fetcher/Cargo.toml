@@ -10,7 +10,7 @@ name = "kolektor-fetcher"
 path = "src/main.rs"
 
 [dependencies]
-kolektor-common = { path = "../kolektor-common", version.workspace = true }
+kolektor-common = { version = "0.1.0", path = "../kolektor-common" }
 
 tokio = { workspace = true }
 serde = { workspace = true }
