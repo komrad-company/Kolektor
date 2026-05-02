@@ -34,12 +34,12 @@ Champs principaux :
 |----------------------|-------------|
 | `provider`           | `microsoft_graph`, `microsoft365_management` ou `s3` |
 | `parser_source_type` | Parser cible, ex. `identity/microsoft-entra` |
-| `output_path`        | Fichier JSONL ecrit par le fetcher et lu par Vector |
+| `output_path`        | Fichier JSONL sous `/var/lib/kolektor/fetcher`, ecrit par le fetcher et lu par Vector |
 | `interval_seconds`   | Frequence de polling, minimum 30 secondes |
 | `config`             | Configuration provider-specific |
 | `state`              | Curseurs geres par `kolektor-fetcher` |
 
-Eviter de stocker les secrets dans `config`. Preferer les champs `*_env` qui
+Les secrets inline sont refuses dans `config`. Utiliser les champs `*_env` qui
 referencent une variable d'environnement montee dans le pod fetcher.
 
 ## Microsoft Entra ID
