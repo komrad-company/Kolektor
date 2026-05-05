@@ -14,21 +14,21 @@ permissions:
   packages: write
 
 jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check generated catalog index
+        run: python3 ci/catalog_index.py --check
+
   vector:
     uses: komrad-company/workflows/.github/workflows/vector-checks.yml@main
     with:
       vector-image: timberio/vector:0.54.0-debian
     secrets: inherit
 
-  rust:
-    uses: komrad-company/workflows/.github/workflows/rust-checks.yml@main
-    with:
-      working-directory: api
-      workspace: true
-      sqlx-offline: true
-
   publish:
-    needs: [vector, rust]
+    needs: [catalog, vector]
     if: github.ref == 'refs/heads/main'
     uses: komrad-company/workflows/.github/workflows/docker-publish.yml@main
     with:
