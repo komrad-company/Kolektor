@@ -14,10 +14,11 @@ Matiere premiere du SOC UI : chaque config est une source de donnees deployable 
 ```
 
 **Deploiement K8s** : 1 image Docker contient Vector + tout le catalog.
-Au runtime, `SOURCE_TYPE` selectionne la config. Chaque datasource = 1 Deployment.
+Le pod Vector est pilote par `Kolektor-kontroler`, qui lit `catalog/index.json`
+et applique les parsers actifs via gRPC.
 
 ```
-SOC UI → API Rust → commit Git → ArgoCD → Deployment Vector (SOURCE_TYPE=xxx) → Quickwit
+Kontrol-ui → Kontrol-api → gRPC Kolektor-kontroler → Vector --watch-config → Quickwit
 ```
 
 ## Structure du repo
@@ -62,6 +63,7 @@ kolektor/
 │       └── cloudflare-http/ #  HTTP Requests Logpull / export JSONL
 │
 └── ci/                     # Scripts CI
+    ├── catalog_index.py    # Genere catalog/index.json
     ├── validate.sh         # vector validate sur chaque config
     ├── test.sh             # vector test (merge config + tests/*.toml)
     ├── coverage.sh         # Verifie min 3 tests par source
@@ -85,6 +87,7 @@ catalog/<category>/<source>/
 | Variable            | Obligatoire | Description                          | Exemple                           |
 |---------------------|-------------|--------------------------------------|-----------------------------------|
 | `SOURCE_TYPE`       | oui         | Chemin catalog (categorie/source)    | `network/opnsense`                |
+| `SOURCE_TYPES`      | non         | Liste CSV multi-parsers              | `network/opnsense,linux/syslog`   |
 | `TENANT_ID`         | oui         | ID du tenant (multi-tenant)          | `tenant-acme`                     |
 | `DATASOURCE_ID`     | oui         | ID unique de la datasource           | `ds-opnsense-hq`                  |
 | `QUICKWIT_ENDPOINT` | oui         | URL Quickwit                         | `http://quickwit-searcher:7280`   |
@@ -142,13 +145,14 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 
 ## CI Pipeline
 
-| Stage    | Description                                   | Image                     |
-|----------|-----------------------------------------------|---------------------------|
-| validate | `vector validate` sur chaque vector.toml      | vector:0.54.0-debian      |
-| test     | `vector test` (config + tests merges)         | vector:0.54.0-debian      |
-| coverage | Verifie >= 3 tests par source                 | vector:0.54.0-debian      |
-| report   | Genere rapport markdown en artifact           | ubuntu-latest + python 3.12 |
-| build    | docker/build-push-action → ghcr.io (main)     | ubuntu-latest             |
+| Stage    | Description                                      | Image                     |
+|----------|--------------------------------------------------|---------------------------|
+| catalog  | Verifie `catalog/index.json`                     | ubuntu-latest + python    |
+| validate | `vector validate` sur chaque vector.toml         | vector:0.54.0-debian      |
+| test     | `vector test` (config + tests merges)            | vector:0.54.0-debian      |
+| coverage | Verifie >= 3 tests par source                    | vector:0.54.0-debian      |
+| report   | Genere rapport markdown en artifact              | ubuntu-latest + python    |
+| build    | docker/build-push-action → ghcr.io (main)        | ubuntu-latest             |
 
 ## Contribuer
 
@@ -156,7 +160,7 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 2. Ecrire le VRL de parsing + normalisation OCSF
 3. Ajouter >= 3 tests dans `tests/` avec des logs bruts reels
 4. Ajouter un `README.md` documentant la source
-5. `ci/validate.sh` + `ci/test.sh` pour valider localement
+5. `ci/catalog_index.py` + `ci/validate.sh` + `ci/test.sh` pour valider localement
 6. Push → CI valide automatiquement
 
 ### Convention raw / parsing
@@ -170,7 +174,5 @@ ArgoCD sync automatique → pod Vector pret a recevoir.
 - Le parser Vector ne porte que la normalisation : format brut canonique en entree, enrichissement minimal, mapping OCSF, routage Quickwit.
 - La recuperation des logs cloud/SaaS est la responsabilite d'un collecteur : API pull avec curseur, object storage + queue, Event Hub/EventBridge, ou Logpush HTTP quand le fournisseur sait pousser.
 - Pour les sources cloud, le format canonique recommande est JSON line-delimited. Le meme parser doit pouvoir traiter les lignes issues d'un collecteur API ou d'un export pousse si le schema source reste identique.
-
-Voir `docs/FETCHERS.md` pour la configuration des fetchers pull.
 
 Voir `_schema/README.md` pour le guide complet.

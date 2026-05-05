@@ -8,43 +8,28 @@ Matiere premiere du SOC UI : chaque config est une source de donnees deployable 
 ```
 kolektor/
 ├── _schema/            # Template + guide contribution
-├── catalog/
+├── catalog/            # Configs Vector + catalog/index.json genere
 │   ├── network/        # Firewalls (OCSF 4001)
 │   ├── endpoint/       # EDR (OCSF 1001/1003/2001)
 │   ├── identity/       # Windows EVTX / Sysmon (OCSF 3001/3002)
 │   ├── linux/          # syslog, auditd, auth-log
 │   ├── cloud/          # CloudTrail (OCSF 6001)
-│   └── web/            # nginx (OCSF 4001)
-├── api/                # Workspace Cargo : kolektor-api (bin), kolektor-common, kolektor-seed
-│   ├── Cargo.toml
-│   ├── crates/
-│   └── migrations/     # sqlx migrations (schema PG `kolektor`)
-├── ci/                 # Scripts CI Vector (validate, test, coverage, report)
-├── Dockerfile          # Multi-stage : build Rust puis runtime Vector + kolektor-api
-└── .github/workflows/  # GitHub Actions : Vector CI + Rust CI → ghcr.io/komrad-company/kolektor
+│   └── web/            # nginx, traefik, cloudflare
+├── ci/                 # Scripts CI Vector + generation catalog/index.json
+├── Dockerfile          # Runtime Vector + catalogue embarque
+└── .github/workflows/  # GitHub Actions : catalogue, Vector CI, Docker publish
 ```
 
-## API REST — architecture
-- **Binaire unique** `kolektor-api` avec 3 subcommands : `init`, `serve`, `token`.
-- **1 pod** dans la namespace `kolektor` (voir argocd repo) :
-  - `initContainer` (`kolektor-api init`) : migrate + seed catalog → DB + ecrit le fichier Vector initial sur emptyDir partage.
-  - `api` (`kolektor-api serve`) : Axum sur :8080, auth Bearer token bcrypt. Sur `PUT /v1/parsers/{cat}/{name}/enabled`, reecrit atomiquement `/etc/vector/kolektor/sources.toml`.
-  - `vector` : `--watch-config` sur `/etc/vector/kolektor/sources.toml`, ports 5140-5143.
-- **Source de verite** : PostgreSQL (schema `kolektor` sur l'instance partagee Kontrol). Tables `parsers`, `api_tokens`, `sync_events`.
-- **Catalog Git = seed** : les `catalog/*/*/vector.toml` sont importes en DB au premier `init` (UPSERT preserve `enabled`, incremente `version` si le TOML change).
-- **Endpoints v1** :
-  - `GET  /v1/health` (no auth)
-  - `GET  /v1/status` · `GET /v1/parsers` · `GET /v1/parsers/{cat}/{name}` · `PUT /v1/parsers/{cat}/{name}/enabled` (Bearer token)
-- **Idempotence** : `PUT enabled=true` repete = meme reponse, un seul `sync_event`, pas de reload Vector parasite (compat Terraform future).
+## Architecture cible
+- `Kolektor` livre Vector et le catalogue local.
+- `Kolektor-kontroler`, dans le pod Vector, lit `/etc/vector/catalog/index.json`, expose le catalogue en gRPC et applique les parsers actifs.
+- `Kontrol-api` orchestre l'etat desire cote BFF et appelle `Kolektor-kontroler`.
+- Aucune API REST Rust ne vit dans ce repo.
 
-## Bootstrap token API
-Apres le premier deploiement :
-```bash
-kubectl -n kolektor exec -it deploy/kolektor -c api -- \
-  kolektor-api token create --name bootstrap --tenant-id acme
-```
-Le secret est affiche une seule fois ; a stocker cote client (ex: Kontrol secret store).
-Usage : `curl -H "Authorization: Bearer <token>" https://kolektor-api.example.com/v1/parsers`.
+## Catalogue
+- `catalog/*/*/manifest.yaml` contient les metadonnees humaines.
+- `catalog/*/*/vector.toml` contient le bloc Vector applique par le controleur.
+- `catalog/index.json` est genere par `ci/catalog_index.py` et doit rester synchronise avec les manifests.
 
 ## Conventions
 - **Format** : TOML pour les configs Vector, VRL inline dans les transforms
@@ -55,20 +40,13 @@ Usage : `curl -H "Authorization: Bearer <token>" https://kolektor-api.example.co
 - **Commits** : `feat:`, `fix:`, `test:`, `ci:`, `docs:`
 - **Langue** : francais pour docs et commentaires
 
-## Index Quickwit
-| Index            | Classe OCSF         | category_uid |
-|------------------|----------------------|--------------|
-| `ocsf-network`   | 4001 Network Activity | 4           |
-| `ocsf-endpoint`  | 1001/1003 File/Proc  | 1           |
-| `ocsf-identity`  | 3001/3002 Acct/Auth  | 3           |
-| `ocsf-audit`     | 6001 API Activity    | 6           |
-
 ## CI
-- `vector validate` sur chaque `vector.toml` (avec dummy env vars injectes par `ci/validate.sh`)
+- `python3 ci/catalog_index.py --check`
+- `vector validate` sur chaque `vector.toml` avec dummy env vars injectes par `ci/validate.sh`
 - `vector test` sur chaque source (merge vector.toml + tests/*.toml)
 - Rapport markdown en artifact
-- Image CI : `timberio/vector:0.54.0-debian` (container: job, `secrets: inherit` requis pour Docker Hub)
-- SAST : gitleaks + cargo-audit/deny + hadolint + grype (voir `docs/CI.md`)
+- Image CI : `timberio/vector:0.54.0-debian`
+- SAST : gitleaks + hadolint + grype (voir `docs/CI.md`)
 
 ## Pieges connus
 - `vector test` necessite que les tests soient dans le meme fichier ou passes en argument avec le config

@@ -16,8 +16,6 @@ jobs:
   secrets:
     uses: komrad-company/workflows/.github/workflows/security-secrets.yml@main
 
-  rust:
-    uses: komrad-company/workflows/.github/workflows/security-rust.yml@main
   docker:
     uses: komrad-company/workflows/.github/workflows/security-docker.yml@main
     with:
