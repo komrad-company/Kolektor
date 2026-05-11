@@ -1,4 +1,5 @@
 display_name: Microsoft Entra ID
+default_port: 8518
 ocsf_outputs:
   - class_uid: 3002
     category_uid: 3

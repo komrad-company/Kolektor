@@ -1,12 +1,13 @@
 [[tests]]
-name = "Microsoft 365 Audit — malformed JSON"
+name = "Microsoft 365 Audit — required fields missing"
 
 [[tests.inputs]]
 insert_at = "microsoft365_audit_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = "not json"
+  Id           = "m365-bad"
+  CreationTime = "2026-04-22T10:00:00"
 
 [[tests.outputs]]
 extract_from = "microsoft365_audit_parse_and_normalize"
@@ -15,7 +16,8 @@ extract_from = "microsoft365_audit_parse_and_normalize"
 type   = "vrl"
 source = '''
   assert_eq!(.class_uid, 0)
-  assert_eq!(.raw, "not json")
+  assert_eq!(.category_uid, 0)
+  assert!(exists(.raw))
 '''
 
 [[tests.outputs]]
@@ -26,6 +28,6 @@ type   = "vrl"
 source = '''
   assert_eq!(.parse_status, "failed")
   assert_eq!(.source_type, "cloud/microsoft-365-audit")
-  assert_eq!(.parse_error, "microsoft365_audit_json_or_required_fields_invalid")
-  assert_eq!(.raw, "not json")
+  assert_eq!(.parse_error, "microsoft365_audit_required_fields_missing")
+  assert!(exists(.raw))
 '''

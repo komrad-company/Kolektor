@@ -6,7 +6,19 @@ insert_at = "microsoft_entra_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = '{"id":"signin-1","createdDateTime":"2026-04-22T10:00:00Z","userPrincipalName":"alice@example.com","userId":"user-1","appDisplayName":"Office 365","appId":"app-1","ipAddress":"203.0.113.10","status":{"errorCode":0},"conditionalAccessStatus":"success","resourceDisplayName":"Microsoft Graph","clientAppUsed":"Browser"}'
+  id                    = "signin-1"
+  createdDateTime       = "2026-04-22T10:00:00Z"
+  userPrincipalName     = "alice@example.com"
+  userId                = "user-1"
+  appDisplayName        = "Office 365"
+  appId                 = "app-1"
+  ipAddress             = "203.0.113.10"
+  conditionalAccessStatus = "success"
+  resourceDisplayName   = "Microsoft Graph"
+  clientAppUsed         = "Browser"
+
+  [tests.inputs.log_fields.status]
+  errorCode = 0
 
 [[tests.outputs]]
 extract_from = "microsoft_entra_parse_and_normalize"

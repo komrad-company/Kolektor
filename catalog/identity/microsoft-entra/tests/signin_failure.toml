@@ -6,7 +6,18 @@ insert_at = "microsoft_entra_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = '{"id":"signin-2","createdDateTime":"2026-04-22T10:05:00Z","userPrincipalName":"bob@example.com","userId":"user-2","appDisplayName":"Azure Portal","ipAddress":"198.51.100.50","status":{"errorCode":50126,"failureReason":"Invalid username or password"},"riskLevelAggregated":"medium","signInEventTypes":["interactiveUser"]}'
+  id                  = "signin-2"
+  createdDateTime     = "2026-04-22T10:05:00Z"
+  userPrincipalName   = "bob@example.com"
+  userId              = "user-2"
+  appDisplayName      = "Azure Portal"
+  ipAddress           = "198.51.100.50"
+  riskLevelAggregated = "medium"
+  signInEventTypes    = ["interactiveUser"]
+
+  [tests.inputs.log_fields.status]
+  errorCode     = 50126
+  failureReason = "Invalid username or password"
 
 [[tests.outputs]]
 extract_from = "microsoft_entra_parse_and_normalize"
