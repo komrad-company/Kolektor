@@ -12,7 +12,7 @@ type    = "syslog"
 address = "0.0.0.0:${LISTEN_PORT:-5143}"
 mode    = "tcp"
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.auditd_parse_and_normalize]
 type   = "remap"
 inputs = ["auditd_input"]
@@ -25,27 +25,27 @@ source = '''
   # type=SYSCALL msg=audit(1713091425.123:456): arch=c000003e syscall=59 ...
   raw_msg = string!(.message)
 
-  # Extraire le type d'event
+  # Extract event type
   type_match = parse_regex(raw_msg, r'^type=(?P<type>[A-Z_]+)') ?? {}
   audit_type = type_match.type
 
-  # Extraire le timestamp depuis msg=audit(EPOCH.MS:SERIAL)
+  # Extract timestamp from msg=audit(EPOCH.MS:SERIAL)
   ts_match = parse_regex(raw_msg, r'msg=audit\((?P<epoch>\d+)\.(?P<ms>\d+):(?P<serial>\d+)\)') ?? {}
   epoch_s = ts_match.epoch
   epoch_ms_raw = ts_match.ms
 
-  # Calculer le timestamp en millisecondes
+  # Compute timestamp in milliseconds
   if epoch_s != null {
     .time = to_int!(epoch_s) * 1000 + to_int!(epoch_ms_raw)
   } else {
     .time = to_unix_timestamp!(now(), unit: "milliseconds")
   }
 
-  # Parse tous les key=value apres le header
+  # Parse all key=value pairs after the header
   kv_part = replace(raw_msg, r'^type=[A-Z_]+ msg=audit\([^)]+\): ?', "")
   pairs = parse_key_value(kv_part, key_value_delimiter: "=", field_delimiter: " ") ?? {}
 
-  # Determiner la classe OCSF selon le type auditd
+  # Determine OCSF class from auditd type
   is_auth = audit_type == "USER_AUTH" || audit_type == "USER_LOGIN" || audit_type == "CRED_ACQ" || audit_type == "USER_ACCT"
   is_process = audit_type == "SYSCALL" || audit_type == "EXECVE" || audit_type == "PROCTITLE"
   valid = is_auth || is_process
@@ -117,7 +117,7 @@ source = '''
     "key":        key_val
   }
 
-  # Ligne brute complète (header syslog + contenu auditd) + identifiant unique
+  # Full raw line (syslog header + auditd content) + unique identifier
   _ts   = to_string(.timestamp) ?? ""
   _host = string(.hostname)     ?? ""
   _app  = string(.appname)      ?? ""
@@ -136,13 +136,13 @@ source = '''
   del(.source_type)
 '''
 
-# --- FILTER : drop vides ---
+# --- FILTER : drop empty ---
 [transforms.auditd_filter_valid]
 type      = "filter"
 inputs    = ["auditd_parse_and_normalize"]
 condition = '.class_uid == 1003 || .class_uid == 3002'
 
-# --- ROUTE : dispatch par class_uid (3002 USER_AUTH → identity, 1003 SYSCALL → endpoint) ---
+# --- ROUTE : dispatch by class_uid (3002 USER_AUTH → identity, 1003 SYSCALL → endpoint) ---
 [transforms.auditd_route_by_class]
 type   = "route"
 inputs = ["auditd_filter_valid"]
@@ -154,7 +154,7 @@ type      = "filter"
 inputs    = ["auditd_parse_and_normalize"]
 condition = '.class_uid != 1003 && .class_uid != 3002'
 
-# --- TRANSFORM : extraction des echecs pour raw-logs ---
+# --- TRANSFORM : extract failures for raw-logs ---
 [transforms.auditd_raw_only]
 type   = "remap"
 inputs = ["auditd_filter_failed"]

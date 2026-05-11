@@ -12,7 +12,7 @@ type    = "syslog"
 address = "0.0.0.0:${LISTEN_PORT:-5142}"
 mode    = "tcp"
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.authlog_parse_and_normalize]
 type   = "remap"
 inputs = ["authlog_input"]
@@ -21,8 +21,8 @@ source = '''
   .datasource_id = "${DATASOURCE_ID}"
   .received_time = to_unix_timestamp(now(), unit: "milliseconds")
 
-  # La source syslog Vector parse le header et fournit :
-  # .hostname, .appname, .procid, .timestamp, .message (corps du message uniquement)
+  # Vector syslog source parses the header and provides:
+  # .hostname, .appname, .procid, .timestamp, .message (message body only)
   hostname = string(.hostname) ?? ""
   app      = string(.appname) ?? ""
   pid_raw  = .procid
@@ -30,7 +30,7 @@ source = '''
   msg      = string!(.message)
   raw_msg  = msg
 
-  # Determiner le type d'event et extraire les details depuis le corps du message
+  # Determine event type and extract details from the message body
   is_ssh_accept = match(msg, r'Accepted\s+(password|publickey)\s+for')
   is_ssh_fail = match(msg, r'Failed\s+(password|publickey)\s+for')
   is_ssh_invalid = match(msg, r'Invalid user')
@@ -48,16 +48,16 @@ source = '''
   # sudo: "user : TTY=pts/0 ; PWD=/home/user ; USER=root ; COMMAND=/usr/bin/apt update"
   sudo_match = parse_regex(msg, r'(?P<user>\S+)\s+:\s+TTY=(?P<tty>\S+)\s+;\s+PWD=(?P<pwd>\S+)\s+;\s+USER=(?P<target_user>\S+)\s+;\s+COMMAND=(?P<command>.+)$') ?? {}
 
-  # Construire les champs en fonction du type (ssh_fail/sudo_match si ssh_accept vide).
-  # En VRL, `??` fallback uniquement sur *erreur* d'expression fallible, pas sur `null`
-  # (une valeur null est "infaillible") — ici les captures regex retournent null => cascade explicite.
+  # Build fields based on event type (ssh_fail/sudo_match if ssh_accept is empty).
+  # In VRL, `??` only falls back on *errors* from fallible expressions, not on `null`
+  # (a null value is "infallible") — here regex captures return null => explicit cascade.
   user_name = if ssh_accept.user != null { ssh_accept.user } else if ssh_fail.user != null { ssh_fail.user } else if sudo_match.user != null { sudo_match.user } else { null }
   src_ip = if ssh_accept.ip != null { ssh_accept.ip } else if ssh_fail.ip != null { ssh_fail.ip } else { null }
   src_port_raw = if ssh_accept.port != null { ssh_accept.port } else if ssh_fail.port != null { ssh_fail.port } else { null }
   src_port = if src_port_raw != null { to_int!(src_port_raw) } else { null }
   auth_method = if ssh_accept.method != null { ssh_accept.method } else if ssh_fail.method != null { ssh_fail.method } else { null }
 
-  # Severity et status
+  # Severity and status
   is_success = is_ssh_accept || (is_sudo && !match(msg, r'authentication failure'))
   is_failure = is_ssh_fail || is_ssh_invalid || match(msg, r'authentication failure')
   ocsf_severity = if is_failure { 3 } else { 1 }
@@ -117,7 +117,7 @@ source = '''
     "sudo_target_user": sudo_target
   }
 
-  # Ligne brute complète (header syslog + message) + identifiant unique
+  # Full raw line (syslog header + message) + unique identifier
   _pid = if pid_raw != null { "[" + to_string!(pid_raw) + "]" } else { "" }
   _ts  = to_string(.timestamp) ?? ""
   .raw = _ts + " " + hostname + " " + app + _pid + ": " + raw_msg
@@ -135,7 +135,7 @@ source = '''
   del(.source_type)
 '''
 
-# --- FILTER : drop vides ---
+# --- FILTER : drop empty ---
 [transforms.authlog_filter_valid]
 type      = "filter"
 inputs    = ["authlog_parse_and_normalize"]
@@ -146,7 +146,7 @@ type      = "filter"
 inputs    = ["authlog_parse_and_normalize"]
 condition = '.class_uid != 3002'
 
-# --- TRANSFORM : extraction des echecs pour raw-logs ---
+# --- TRANSFORM : extract failures for raw-logs ---
 [transforms.authlog_raw_only]
 type   = "remap"
 inputs = ["authlog_filter_failed"]
