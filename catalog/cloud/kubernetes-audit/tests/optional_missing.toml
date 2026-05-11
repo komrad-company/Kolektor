@@ -6,7 +6,7 @@ insert_at = "k8s_audit_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = '{"kind":"Event","apiVersion":"audit.k8s.io/v1","level":"Metadata","auditID":"xyz-forbidden-123","stage":"ResponseComplete","requestURI":"/apis/rbac.authorization.k8s.io/v1/clusterroles/view","verb":"delete","user":{"username":"system:serviceaccount:dev:builder"},"sourceIPs":["192.168.1.42"],"objectRef":{"resource":"clusterroles","name":"view","apiGroup":"rbac.authorization.k8s.io","apiVersion":"v1"},"responseStatus":{"code":403,"reason":"Forbidden"},"requestReceivedTimestamp":"2024-04-14T11:00:00Z","stageTimestamp":"2024-04-14T11:00:00.100Z","annotations":{"authorization.k8s.io/decision":"forbid"}}'
+  message = '{"kind":"Event","apiVersion":"audit.k8s.io/v1","level":"Metadata","auditID":"xyz-forbidden-123","stage":"ResponseComplete","requestURI":"/apis/rbac.authorization.k8s.io/v1/clusterroles/view","verb":"delete","user":{"username":"system:serviceaccount:dev:builder"},"sourceIPs":["198.51.100.42"],"objectRef":{"resource":"clusterroles","name":"view","apiGroup":"rbac.authorization.k8s.io","apiVersion":"v1"},"responseStatus":{"code":403,"reason":"Forbidden"},"requestReceivedTimestamp":"2024-04-14T11:00:00Z","stageTimestamp":"2024-04-14T11:00:00.100Z","annotations":{"authorization.k8s.io/decision":"forbid"}}'
 
 [[tests.outputs]]
 extract_from = "k8s_audit_parse_and_normalize"
