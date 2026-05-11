@@ -115,23 +115,6 @@ docker run kolektor
 
 The image is built by GitHub Actions (docker/build-push-action) and pushed to `ghcr.io/komrad-company/kolektor` on every merge to `main` (tags `latest` + `<sha>`).
 
-## Kubernetes deployment (ArgoCD)
-
-One datasource = one Deployment in `infrastructure/kolektor-collector/` (argocd repo):
-
-```yaml
-env:
-  - name: SOURCE_TYPE
-    value: "linux/syslog"        # ← selects the catalogue config
-  - name: TENANT_ID
-    value: "acme"
-  - name: DATASOURCE_ID
-    value: "ds-syslog-01"
-  - name: QUICKWIT_ENDPOINT
-    value: "http://quickwit-searcher.quickwit:7280"
-```
-
-ArgoCD syncs automatically — the Vector pod is ready to receive.
 
 ## Target Quickwit indexes
 
