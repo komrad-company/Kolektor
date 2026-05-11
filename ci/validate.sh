@@ -50,7 +50,7 @@ cat > "$RESULTS_DIR/validate-junit.xml" <<XMLEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
   <testsuite name="validate" tests="$TOTAL" failures="$FAILED">
-$(echo -e "$JUNIT_CASES")
+$(printf '%b' "$JUNIT_CASES")
   </testsuite>
 </testsuites>
 XMLEOF

@@ -12,6 +12,10 @@ export AUDIT_LOG_PATH="/dev/null"
 export NGINX_ACCESS_LOG="/dev/null"
 export TRAEFIK_ACCESS_LOG="/dev/null"
 export K8S_AUDIT_LOG="/dev/null"
+export CLOUDFLARE_HTTP_LOG="/dev/null"
+export MS365_AUDIT_LOG="/dev/null"
+export MS_ENTRA_LOG="/dev/null"
+export SURICATA_EVE_LOG="/dev/null"
 
 RESULTS_DIR="ci/results"
 mkdir -p "$RESULTS_DIR"
@@ -63,7 +67,7 @@ cat > "$RESULTS_DIR/test-junit.xml" <<XMLEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
   <testsuite name="test" tests="$TOTAL" failures="$FAILED">
-$(echo -e "$JUNIT_CASES")
+$(printf '%b' "$JUNIT_CASES")
   </testsuite>
 </testsuites>
 XMLEOF
