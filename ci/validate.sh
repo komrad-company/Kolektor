@@ -14,8 +14,6 @@ export NGINX_ACCESS_LOG="/dev/null"
 export TRAEFIK_ACCESS_LOG="/dev/null"
 export K8S_AUDIT_LOG="/dev/null"
 export CLOUDFLARE_HTTP_LOG="/dev/null"
-export MS365_AUDIT_LOG="/dev/null"
-export MS_ENTRA_LOG="/dev/null"
 export SURICATA_EVE_LOG="/dev/null"
 
 RESULTS_DIR="ci/results"
