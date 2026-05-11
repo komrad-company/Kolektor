@@ -69,5 +69,6 @@ echo "Starting Vector with ${#SELECTED_SOURCES[@]} source(s): ${SELECTED_SOURCES
 echo "  Tenant:     $TENANT_ID"
 echo "  Datasource: $DATASOURCE_ID"
 echo "  Quickwit:   $QUICKWIT_ENDPOINT"
+echo "  Port:       ${LISTEN_PORT:-(parser default)}"
 
 exec vector "${CONFIG_ARGS[@]}" "$@"
