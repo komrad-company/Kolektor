@@ -6,7 +6,22 @@ insert_at = "microsoft_entra_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = '{"id":"audit-1","activityDateTime":"2026-04-22T10:10:00Z","activityDisplayName":"Add member to group","category":"GroupManagement","result":"success","loggedByService":"Core Directory","initiatedBy":{"user":{"id":"admin-1","userPrincipalName":"admin@example.com"},"app":{"appId":"app-admin","displayName":"Admin portal"}},"targetResources":[{"id":"group-1","displayName":"SOC Admins","type":"Group"}],"correlationId":"corr-1"}'
+  id                  = "audit-1"
+  activityDateTime    = "2026-04-22T10:10:00Z"
+  activityDisplayName = "Add member to group"
+  category            = "GroupManagement"
+  result              = "success"
+  loggedByService     = "Core Directory"
+  correlationId       = "corr-1"
+  targetResources     = [{id = "group-1", displayName = "SOC Admins", type = "Group"}]
+
+  [tests.inputs.log_fields.initiatedBy.user]
+  id                = "admin-1"
+  userPrincipalName = "admin@example.com"
+
+  [tests.inputs.log_fields.initiatedBy.app]
+  appId       = "app-admin"
+  displayName = "Admin portal"
 
 [[tests.outputs]]
 extract_from = "microsoft_entra_parse_and_normalize"

@@ -1,99 +1,89 @@
 # ==============================================================================
-# Microsoft 365 Unified Audit — Management Activity API JSONL
+# Microsoft 365 Unified Audit — Management Activity API
 # OCSF Class : 6001 (API Activity)
-# Input      : File (JSON per line) written by kolektor-fetcher
+# Input      : HTTP push — POST NDJSON sur ${LISTEN_PORT:-8517}
+#              Le fetcher poste chaque event JSON sur une ligne distincte.
 # ==============================================================================
 
-[sources.microsoft365_audit_file]
-type    = "file"
-include = ["${MS365_AUDIT_LOG:-/var/lib/kolektor/fetcher/microsoft-365-audit.jsonl}"]
+[sources.microsoft365_audit_input]
+type     = "http_server"
+address  = "0.0.0.0:${LISTEN_PORT:-8517}"
+encoding = "json"
 
 [transforms.microsoft365_audit_parse_and_normalize]
 type   = "remap"
-inputs = ["microsoft365_audit_file"]
+inputs = ["microsoft365_audit_input"]
 source = '''
-  .tenant_id     = "${TENANT_ID}"
-  .datasource_id = "${DATASOURCE_ID}"
-  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+  tenant_id     = "${TENANT_ID}"
+  datasource_id = "${DATASOURCE_ID}"
+  received_time = to_unix_timestamp(now(), unit: "milliseconds")
+  raw_msg       = encode_json(.)
 
-  raw_msg = string!(.message)
-  parsed = parse_json(raw_msg) ?? null
-  valid_json = is_object(parsed)
+  operation = to_string(.Operation) ?? null
+  workload   = to_string(.Workload)  ?? null
+  valid = operation != null && operation != "" && workload != null && workload != ""
 
-  if valid_json {
-    ev = object!(parsed)
-    operation = to_string(get(ev, ["Operation"]) ?? null) ?? null
-    workload = to_string(get(ev, ["Workload"]) ?? null) ?? null
-    valid = operation != null && operation != "" && workload != null && workload != ""
+  ts_str    = to_string(.CreationTime) ?? null
+  parsed_ts = if ts_str != null {
+    parse_timestamp(ts_str, format: "%+") ?? parse_timestamp(ts_str, format: "%Y-%m-%dT%H:%M:%S") ?? null
+  } else { null }
+  ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
 
-    ts_str = to_string(get(ev, ["CreationTime"]) ?? null) ?? null
-    parsed_ts = if ts_str != null { parse_timestamp(ts_str, format: "%+") ?? parse_timestamp(ts_str, format: "%Y-%m-%dT%H:%M:%S") ?? null } else { null }
-    ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+  result     = to_string(.ResultStatus) ?? null
+  result_lc  = if result != null { downcase!(result) } else { "" }
+  is_failure = result_lc != "" && result_lc != "succeeded" && result_lc != "success" && result_lc != "true"
 
-    result = to_string(get(ev, ["ResultStatus"]) ?? null) ?? null
-    result_lc = if result != null { downcase!(result) } else { "" }
-    is_failure = result_lc != "" && result_lc != "succeeded" && result_lc != "success" && result_lc != "true"
+  user_name = to_string(.UserId)   ?? null
+  user_uid  = to_string(.UserKey)  ?? null
+  user_type = to_string(.UserType) ?? null
+  client_ip = to_string(.ClientIP) ?? null
+  event_uid = to_string(.Id)       ?? null
 
-    .class_uid    = if valid { 6001 } else { 0 }
-    .category_uid = if valid { 6 } else { 0 }
-    .severity_id  = if !valid { 0 } else if is_failure { 3 } else { 1 }
-    .time         = ts
-    .status       = if is_failure { "Failure" } else { "Success" }
-    .status_id    = if is_failure { 2 } else { 1 }
+  ocsf_unmapped = {
+    "record_type":        .RecordType,
+    "object_id":          to_string(.ObjectId)         ?? null,
+    "organization_id":    to_string(.OrganizationId)   ?? null,
+    "client_info_string": to_string(.ClientInfoString) ?? null,
+    "external_access":    .ExternalAccess,
+    "user_agent":         to_string(.UserAgent)        ?? null
+  }
 
-    .api = {
+  . = {
+    "class_uid":    if valid { 6001 } else { 0 },
+    "category_uid": if valid { 6 } else { 0 },
+    "severity_id":  if !valid { 0 } else if is_failure { 3 } else { 1 },
+    "time":         ts,
+    "status":       if is_failure { "Failure" } else { "Success" },
+    "status_id":    if is_failure { 2 } else { 1 },
+    "api": {
       "operation": operation,
-      "service": {
-        "name": workload
-      },
-      "response": {
-        "error_message": result
-      }
-    }
-
-    .actor = {
+      "service":   { "name": workload },
+      "response":  { "error_message": result }
+    },
+    "actor": {
       "user": {
-        "name": to_string(get(ev, ["UserId"]) ?? null) ?? null,
-        "uid":  to_string(get(ev, ["UserKey"]) ?? null) ?? null,
-        "type": to_string(get(ev, ["UserType"]) ?? null) ?? null
+        "name": user_name,
+        "uid":  user_uid,
+        "type": user_type
       }
-    }
-
-    .src_endpoint = {
-      "ip": to_string(get(ev, ["ClientIP"]) ?? null) ?? null
-    }
-
-    .metadata = {
+    },
+    "src_endpoint":  { "ip": client_ip },
+    "metadata": {
       "product": {
         "name":        "Microsoft 365 Unified Audit",
         "vendor_name": "Microsoft"
       },
-      "version": "1.0.0",
-      "uid":     to_string(get(ev, ["Id"]) ?? null) ?? null,
+      "version":      "1.0.0",
+      "uid":          event_uid,
       "log_provider": workload
-    }
-
-    .unmapped = {
-      "record_type":        get(ev, ["RecordType"]) ?? null,
-      "object_id":          to_string(get(ev, ["ObjectId"]) ?? null) ?? null,
-      "organization_id":    to_string(get(ev, ["OrganizationId"]) ?? null) ?? null,
-      "client_info_string": to_string(get(ev, ["ClientInfoString"]) ?? null) ?? null,
-      "external_access":    get(ev, ["ExternalAccess"]) ?? null,
-      "user_agent":         to_string(get(ev, ["UserAgent"]) ?? null) ?? null
-    }
-  } else {
-    .class_uid    = 0
-    .category_uid = 0
-    .severity_id  = 0
-    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+    },
+    "unmapped":      ocsf_unmapped,
+    "tenant_id":     tenant_id,
+    "datasource_id": datasource_id,
+    "received_time": received_time,
+    "raw":           raw_msg,
+    "uid":           uuid_v4()
   }
-
-  .raw = raw_msg
-  .uid = uuid_v4()
-  del(.message)
-  del(.file)
-  del(.host)
-  del(.source_type)
 '''
 
 [transforms.microsoft365_audit_filter_valid]
@@ -119,7 +109,7 @@ source = '''
     "source_type":   "cloud/microsoft-365-audit",
     "parser":        "microsoft-365-audit",
     "parse_status":  "failed",
-    "parse_error":   "microsoft365_audit_json_or_required_fields_invalid",
+    "parse_error":   "microsoft365_audit_required_fields_missing",
     "raw":           .raw
   }
 '''

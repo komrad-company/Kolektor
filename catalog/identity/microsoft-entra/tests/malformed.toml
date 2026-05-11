@@ -1,12 +1,13 @@
 [[tests]]
-name = "Microsoft Entra — malformed JSON"
+name = "Microsoft Entra — event type not recognized"
 
 [[tests.inputs]]
 insert_at = "microsoft_entra_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message = "not json"
+  id       = "entra-bad"
+  category = "Unknown"
 
 [[tests.outputs]]
 extract_from = "microsoft_entra_parse_and_normalize"
@@ -16,7 +17,7 @@ type   = "vrl"
 source = '''
   assert_eq!(.class_uid, 0)
   assert_eq!(.category_uid, 0)
-  assert_eq!(.raw, "not json")
+  assert!(exists(.raw))
 '''
 
 [[tests.outputs]]
@@ -27,6 +28,6 @@ type   = "vrl"
 source = '''
   assert_eq!(.parse_status, "failed")
   assert_eq!(.source_type, "identity/microsoft-entra")
-  assert_eq!(.parse_error, "microsoft_entra_json_or_event_shape_invalid")
-  assert_eq!(.raw, "not json")
+  assert_eq!(.parse_error, "microsoft_entra_event_shape_invalid")
+  assert!(exists(.raw))
 '''
