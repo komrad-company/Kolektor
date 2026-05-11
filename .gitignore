@@ -2,4 +2,5 @@ ci/results/
 *.tmp
 .env
 .claude/
+.codex
 api/target/
