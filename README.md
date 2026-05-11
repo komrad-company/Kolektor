@@ -44,7 +44,7 @@ kolektor/
 │   │   └── crowdstrike-falcon/ # JSON via SIEM Connector syslog
 │   │
 │   ├── identity/           # IdP/AD → OCSF 3002 Auth / 3001 Account
-│   │   ├── microsoft-entra/       # Graph signIns/directoryAudits via fetcher
+│   │   ├── microsoft-entra/       # Graph signIns/directoryAudits via HTTP push
 │   │   ├── windows-security-evtx/ # Winlogbeat JSON (4624/4625/4688...)
 │   │   └── windows-sysmon/        # Winlogbeat JSON (events 1/3/7/11/22)
 │   │
@@ -55,7 +55,7 @@ kolektor/
 │   │
 │   ├── cloud/              # Cloud providers → OCSF 6001 API Activity
 │   │   ├── aws-cloudtrail/ # JSON via HTTP
-│   │   └── microsoft-365-audit/ # Unified Audit JSONL via fetcher
+│   │   └── microsoft-365-audit/ # Unified Audit JSONL via HTTP push
 │   │
 │   └── web/                # Serveurs web / edge → OCSF 4002 HTTP Activity
 │       ├── nginx/          #   combined access log via file
