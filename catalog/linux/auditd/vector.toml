@@ -146,7 +146,7 @@ condition = '.class_uid == 1003 || .class_uid == 3002'
 [transforms.auditd_route_by_class]
 type   = "route"
 inputs = ["auditd_filter_valid"]
-route.identity = '.class_uid == 3001 || .class_uid == 3002'
+route.identity = '.class_uid == 3002'
 route.endpoint = '.class_uid == 1001 || .class_uid == 1003'
 
 [transforms.auditd_filter_failed]
