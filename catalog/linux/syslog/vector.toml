@@ -11,7 +11,7 @@ type    = "syslog"
 address = "0.0.0.0:${LISTEN_PORT:-5141}"
 mode    = "tcp"
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.syslog_parse_and_normalize]
 type   = "remap"
 inputs = ["syslog_input"]
@@ -20,12 +20,12 @@ source = '''
   .datasource_id = "${DATASOURCE_ID}"
   .received_time = to_unix_timestamp(now(), unit: "milliseconds")
 
-  # La source syslog de Vector parse automatiquement :
+  # Vector syslog source automatically parses:
   # .timestamp, .hostname, .appname, .facility, .severity, .message
-  # On normalise en OCSF
+  # Normalize to OCSF
 
-  # .severity peut être un entier (RFC 3164) ou un string (RFC 5424 via rsyslog).
-  # Noms RFC 5424 : emerg/alert/crit/err/warning/notice/info/debug (+ synonymes communs).
+  # .severity can be an integer (RFC 3164) or a string (RFC 5424 via rsyslog).
+  # RFC 5424 names: emerg/alert/crit/err/warning/notice/info/debug (+ common synonyms).
   sev_raw = .severity
   sev = if is_integer(sev_raw) {
     to_int!(sev_raw)
@@ -71,14 +71,14 @@ source = '''
     "log_provider": facility
   }
 
-  # Ligne brute complète (header syslog + message) + identifiant unique
+  # Full raw line (syslog header + message) + unique identifier
   _ts  = to_string(.timestamp) ?? ""
   _pid = if procid_val != null { "[" + to_string!(procid_val) + "]" } else { "" }
   _msg = to_string(.message)   ?? ""
   .raw = _ts + " " + (string(.hostname) ?? "") + " " + (string(.appname) ?? "") + _pid + ": " + _msg
   .uid = uuid_v4()
 
-  # Nettoyer les champs syslog natifs
+  # Clean up native syslog fields
   del(.message)
   del(.timestamp)
   del(.hostname)
@@ -91,7 +91,7 @@ source = '''
   del(.source_type)
 '''
 
-# --- FILTER : drop vides ---
+# --- FILTER : drop empty ---
 [transforms.syslog_filter_valid]
 type      = "filter"
 inputs    = ["syslog_parse_and_normalize"]
@@ -102,7 +102,7 @@ type      = "filter"
 inputs    = ["syslog_parse_and_normalize"]
 condition = '.class_uid != 6001 || .raw == null || .raw == ""'
 
-# --- TRANSFORM : extraction des echecs pour raw-logs ---
+# --- TRANSFORM : extract failures for raw-logs ---
 [transforms.syslog_raw_only]
 type   = "remap"
 inputs = ["syslog_filter_failed"]

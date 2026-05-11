@@ -11,7 +11,7 @@ type    = "syslog"
 address = "0.0.0.0:${LISTEN_PORT:-5140}"
 mode    = "tcp"
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.opnsense_parse_and_normalize]
 type   = "remap"
 inputs = ["opnsense_input"]
@@ -22,14 +22,14 @@ source = '''
 
   raw_msg = string!(.message)
 
-  # filterlog CSV format (OPNsense / pfSense) — le layout differe par famille IP :
+  # filterlog CSV format (OPNsense / pfSense) — layout differs by IP family:
   # 0=rulenr, 1=subrulenr, 2=anchorname, 3=label, 4=interface, 5=reason, 6=action,
   # 7=direction, 8=ip_version
-  # IPv4 (ip_version=4) :
+  # IPv4 (ip_version=4):
   #   9=tos, 10=ecn, 11=ttl, 12=id, 13=offset, 14=flags,
   #   15=proto_id, 16=proto, 17=length, 18=src_ip, 19=dst_ip
   #   TCP/UDP: 20=src_port, 21=dst_port
-  # IPv6 (ip_version=6) :
+  # IPv6 (ip_version=6):
   #   9=class, 10=flow-label, 11=hop_limit, 12=proto, 13=proto_id, 14=length,
   #   15=src_ip, 16=dst_ip
   #   TCP/UDP: 17=src_port, 18=dst_port
@@ -37,7 +37,7 @@ source = '''
   fields = split(raw_msg, ",")
   field_count = length(fields)
 
-  # Besoin d'au moins 17 champs (cas IPv6 ICMPv6 sans port : 17 suffisent)
+  # Need at least 17 fields (IPv6 ICMPv6 without port: 17 is sufficient)
   valid = field_count >= 17
 
   if valid {
@@ -47,7 +47,7 @@ source = '''
     interface = fields[4]
 
     is_v6 = ip_version == "6"
-    # VRL : array indexing n'accepte que des literals ; on branche donc sur is_v6.
+    # VRL: array indexing only accepts literals; branch on is_v6 accordingly.
     proto_num_raw = if is_v6 { fields[13] } else { fields[15] }
     proto = if is_v6 { fields[12] } else { fields[16] }
     src_ip = if is_v6 { fields[15] } else { fields[18] }
@@ -114,7 +114,7 @@ source = '''
     .time         = to_unix_timestamp!(now(), unit: "milliseconds")
   }
 
-  # Ligne brute complète (header syslog + CSV filterlog) + identifiant unique
+  # Full raw line (syslog header + filterlog CSV) + unique identifier
   _ts   = to_string(.timestamp) ?? ""
   _host = string(.hostname)     ?? ""
   _app  = string(.appname)      ?? ""
@@ -144,7 +144,7 @@ type      = "filter"
 inputs    = ["opnsense_parse_and_normalize"]
 condition = '.class_uid != 4001'
 
-# --- TRANSFORM : extraction des echecs pour raw-logs ---
+# --- TRANSFORM : extract failures for raw-logs ---
 [transforms.opnsense_raw_only]
 type   = "remap"
 inputs = ["opnsense_filter_failed"]

@@ -1,40 +1,42 @@
 # Kolektor — Vector.dev OCSF Config Catalog
 
-Catalogue de configurations [Vector.dev](https://vector.dev) pour la normalisation de logs en [OCSF](https://schema.ocsf.io).
-Matiere premiere du SOC UI : chaque config est une source de donnees deployable par tenant.
+> *"Collection is not optional. The collective sees everything, or it sees nothing."*
+> — Komrad Engineering Collective, May 2026
+
+Catalogue of [Vector.dev](https://vector.dev) pipeline configurations for log normalisation to [OCSF](https://schema.ocsf.io). Each configuration is a deployable data source — consumed by the Komrad stack and manageable via Kontrol.
 
 ## Architecture
 
 ```
 ┌──────────┐     ┌──────────────────────────┐     ┌──────────┐     ┌───────────┐
-│  Sources  │────→│  Vector (catalog config)  │────→│ Quickwit  │────→│ Kolektor  │
-│ syslog,   │     │  parse VRL + OCSF norm    │     │ index par │     │ correlation│
-│ JSON, file│     │  1 pod par datasource     │     │ classe    │     │ + alertes  │
+│  Sources  │────→│  Vector (catalog config)  │────→│ Quickwit  │────→│ Korelator │
+│ syslog,   │     │  VRL parse + OCSF norm    │     │ index by  │     │ correlation│
+│ JSON, file│     │  1 pod per datasource     │     │ class     │     │ + alerts   │
 └──────────┘     └──────────────────────────┘     └──────────┘     └───────────┘
 ```
 
-**Deploiement K8s** : 1 image Docker contient Vector + tout le catalog.
-Le pod Vector est pilote par `Kolektor-kontroler`, qui lit `catalog/index.json`
-et applique les parsers actifs via gRPC.
+**K8s deployment**: one Docker image contains Vector and the full catalogue.
+The Vector pod is controlled by `Kolektor-kontroler`, which reads `catalog/index.json`
+and applies active parsers via gRPC.
 
 ```
 Kontrol-ui → Kontrol-api → gRPC Kolektor-kontroler → Vector --watch-config → Quickwit
 ```
 
-## Structure du repo
+## Repository structure
 
 ```
 kolektor/
 │
-├── Dockerfile              # Image Vector + catalog embarque
-├── entrypoint.sh           # Selectionne la config via $SOURCE_TYPE
-├── .github/workflows/ci.yml # Pipeline : validate → test → coverage → build → push ghcr.io
+├── Dockerfile              # Vector image + embedded catalogue
+├── entrypoint.sh           # Selects the config via $SOURCE_TYPE
+├── .github/workflows/ci.yml # Pipeline: validate → test → coverage → build → push ghcr.io
 │
 ├── _schema/
-│   ├── template.toml       # Template vide commente (copier pour nouvelle source)
-│   └── README.md           # Guide de contribution pas-a-pas
+│   ├── template.toml       # Commented empty template (copy for new source)
+│   └── README.md           # Step-by-step contribution guide
 │
-├── catalog/                # Toutes les configs Vector par categorie
+├── catalog/                # All Vector configs by category
 │   ├── network/            # Firewalls, NDR → OCSF 4001 Network Activity
 │   │   ├── opnsense/       #   filterlog CSV via syslog
 │   │   ├── fortinet-fortigate/ # key=value via syslog
@@ -48,7 +50,7 @@ kolektor/
 │   │   ├── windows-security-evtx/ # Winlogbeat JSON (4624/4625/4688...)
 │   │   └── windows-sysmon/        # Winlogbeat JSON (events 1/3/7/11/22)
 │   │
-│   ├── linux/              # Logs Linux natifs
+│   ├── linux/              # Native Linux logs
 │   │   ├── syslog/         #   RFC 3164/5424 via syslog TCP → OCSF 6001
 │   │   ├── auditd/         #   audit.log key=value → OCSF 1003/3002
 │   │   └── auth-log/       #   auth.log SSH/sudo/PAM → OCSF 3002
@@ -57,49 +59,49 @@ kolektor/
 │   │   ├── aws-cloudtrail/ # JSON via HTTP
 │   │   └── microsoft-365-audit/ # Unified Audit JSONL via HTTP push
 │   │
-│   └── web/                # Serveurs web / edge → OCSF 4002 HTTP Activity
+│   └── web/                # Web servers / edge → OCSF 4002 HTTP Activity
 │       ├── nginx/          #   combined access log via file
 │       ├── traefik/        #   access log JSON via file
 │       └── cloudflare-http/ #  HTTP Requests Logpull / export JSONL
 │
-└── ci/                     # Scripts CI
-    ├── catalog_index.py    # Genere catalog/index.json
-    ├── validate.sh         # vector validate sur chaque config
+└── ci/                     # CI scripts
+    ├── catalog_index.py    # Generates catalog/index.json
+    ├── validate.sh         # vector validate on each config
     ├── test.sh             # vector test (merge config + tests/*.toml)
-    ├── coverage.sh         # Verifie min 3 tests par source
-    └── report.py           # Genere rapport markdown CI
+    ├── coverage.sh         # Enforces >= 3 tests per source
+    └── report.py           # Generates markdown CI report
 ```
 
-## Chaque source contient
+## Each source contains
 
 ```
 catalog/<category>/<source>/
-├── vector.toml             # Config complete : source + transform VRL + sink
+├── vector.toml             # Full config: source + VRL transform + sink
 ├── tests/
-│   ├── nominal.toml        # Event standard, tous champs presents
-│   ├── edge_case.toml      # Champs optionnels manquants ou valeurs limites
-│   └── malformed.toml      # Input invalide → raw-logs avec parse_status=failed
-└── README.md               # Doc : format, config source, mapping OCSF, liens
+│   ├── nominal.toml        # Standard event, all fields present
+│   ├── edge_case.toml      # Optional fields missing or boundary values
+│   └── malformed.toml      # Invalid input → raw-logs with parse_status=failed
+└── README.md               # Doc: format, source config, OCSF mapping, links
 ```
 
-## Variables d'environnement runtime
+## Runtime environment variables
 
-| Variable            | Obligatoire | Description                          | Exemple                           |
-|---------------------|-------------|--------------------------------------|-----------------------------------|
-| `SOURCE_TYPE`       | oui         | Chemin catalog (categorie/source)    | `network/opnsense`                |
-| `SOURCE_TYPES`      | non         | Liste CSV multi-parsers              | `network/opnsense,linux/syslog`   |
-| `TENANT_ID`         | oui         | ID du tenant (multi-tenant)          | `tenant-acme`                     |
-| `DATASOURCE_ID`     | oui         | ID unique de la datasource           | `ds-opnsense-hq`                  |
-| `QUICKWIT_ENDPOINT` | oui         | URL Quickwit                         | `http://quickwit-searcher:7280`   |
-| `LISTEN_PORT`       | non         | Override du port d'ecoute            | `5140`                            |
+| Variable            | Required | Description                          | Example                           |
+|---------------------|----------|--------------------------------------|-----------------------------------|
+| `SOURCE_TYPE`       | yes      | Catalogue path (category/source)     | `network/opnsense`                |
+| `SOURCE_TYPES`      | no       | CSV list for multi-parser mode       | `network/opnsense,linux/syslog`   |
+| `TENANT_ID`         | yes      | Tenant identifier (multi-tenant)     | `tenant-acme`                     |
+| `DATASOURCE_ID`     | yes      | Unique datasource identifier         | `ds-opnsense-hq`                  |
+| `QUICKWIT_ENDPOINT` | yes      | Quickwit URL                         | `http://quickwit-searcher:7280`   |
+| `LISTEN_PORT`       | no       | Listening port override              | `5140`                            |
 
-## Image Docker
+## Docker image
 
 ```bash
-# Build local
+# Local build
 docker build -t kolektor .
 
-# Run avec une source specifique
+# Run with a specific source
 docker run -e SOURCE_TYPE=linux/syslog \
            -e TENANT_ID=acme \
            -e DATASOURCE_ID=ds-syslog-01 \
@@ -107,20 +109,20 @@ docker run -e SOURCE_TYPE=linux/syslog \
            -p 5140:514 \
            kolektor
 
-# Lister les sources disponibles
+# List available sources
 docker run kolektor
 ```
 
-L'image est buildee par GitHub Actions (docker/build-push-action) et pushee sur `ghcr.io/komrad-company/kolektor` a chaque merge sur `main` (tags `latest` + `<sha>`).
+The image is built by GitHub Actions (docker/build-push-action) and pushed to `ghcr.io/komrad-company/kolektor` on every merge to `main` (tags `latest` + `<sha>`).
 
-## Deploiement K8s (ArgoCD)
+## Kubernetes deployment (ArgoCD)
 
-Chaque datasource = 1 Deployment dans `infrastructure/kolektor-collector/` (repo argocd) :
+One datasource = one Deployment in `infrastructure/kolektor-collector/` (argocd repo):
 
 ```yaml
 env:
   - name: SOURCE_TYPE
-    value: "linux/syslog"        # ← selectionne la config du catalog
+    value: "linux/syslog"        # ← selects the catalogue config
   - name: TENANT_ID
     value: "acme"
   - name: DATASOURCE_ID
@@ -129,50 +131,54 @@ env:
     value: "http://quickwit-searcher.quickwit:7280"
 ```
 
-ArgoCD sync automatique → pod Vector pret a recevoir.
+ArgoCD syncs automatically — the Vector pod is ready to receive.
 
-## Index Quickwit cibles
+## Target Quickwit indexes
 
-| Index            | Classe OCSF                | category_uid | Sources typiques               |
-|------------------|----------------------------|--------------|--------------------------------|
+| Index            | OCSF class                 | category_uid | Typical sources                    |
+|------------------|----------------------------|--------------|------------------------------------|
 | `ocsf-network`   | 4001 Network Activity      | 4            | opnsense, fortigate, suricata flow |
 | `ocsf-http`      | 4002 HTTP Activity         | 4            | nginx, traefik, cloudflare, suricata HTTP |
-| `ocsf-dns`       | 4003 DNS Activity          | 4            | unbound, sysmon DNS, suricata DNS |
+| `ocsf-dns`       | 4003 DNS Activity          | 4            | unbound, sysmon DNS, suricata DNS  |
 | `ocsf-endpoint`  | 1001/1003 File/Process     | 1            | crowdstrike, sysmon, auditd, suricata alerts |
 | `ocsf-identity`  | 3001/3002 Account/Auth     | 3            | entra sign-ins, windows-evtx, auth-log |
 | `ocsf-audit`     | 6001 API Activity          | 6            | cloudtrail, m365 audit, entra directory audits, syslog |
-| `ocsf-k8s`       | 6003 Kubernetes API Activity | 6          | kubernetes-audit               |
+| `ocsf-k8s`       | 6003 Kubernetes API Activity | 6          | kubernetes-audit                   |
 
-## CI Pipeline
+## CI pipeline
 
 | Stage    | Description                                      | Image                     |
 |----------|--------------------------------------------------|---------------------------|
-| catalog  | Verifie `catalog/index.json`                     | ubuntu-latest + python    |
-| validate | `vector validate` sur chaque vector.toml         | vector:0.54.0-debian      |
-| test     | `vector test` (config + tests merges)            | vector:0.54.0-debian      |
-| coverage | Verifie >= 3 tests par source                    | vector:0.54.0-debian      |
-| report   | Genere rapport markdown en artifact              | ubuntu-latest + python    |
-| build    | docker/build-push-action → ghcr.io (main)        | ubuntu-latest             |
+| catalog  | Validates `catalog/index.json`                   | ubuntu-latest + python    |
+| validate | `vector validate` on each vector.toml            | vector:0.54.0-debian      |
+| test     | `vector test` (config + tests merged)            | vector:0.54.0-debian      |
+| coverage | Enforces >= 3 tests per source                   | vector:0.54.0-debian      |
+| report   | Generates markdown report as artifact            | ubuntu-latest + python    |
+| build    | docker/build-push-action → ghcr.io (main only)  | ubuntu-latest             |
 
-## Contribuer
+## Contributing
 
-1. Copier `_schema/template.toml` → `catalog/<category>/<source>/vector.toml`
-2. Ecrire le VRL de parsing + normalisation OCSF
-3. Ajouter >= 3 tests dans `tests/` avec des logs bruts reels
-4. Ajouter un `README.md` documentant la source
-5. `ci/catalog_index.py` + `ci/validate.sh` + `ci/test.sh` pour valider localement
-6. Push → CI valide automatiquement
+1. Copy `_schema/template.toml` → `catalog/<category>/<source>/vector.toml`
+2. Write the VRL parsing and OCSF normalisation logic
+3. Add >= 3 tests in `tests/` using real raw log samples
+4. Add a `README.md` documenting the source
+5. Run `ci/catalog_index.py` + `ci/validate.sh` + `ci/test.sh` to validate locally
+6. Push — CI validates automatically
 
-### Convention raw / parsing
+### Raw / parsing convention
 
-- Un evenement parse va dans son index OCSF et conserve toujours le log source dans le champ `raw`.
-- Un evenement non parse ne va pas dans un index OCSF : il est envoye dans `raw-logs` avec `parse_status = "failed"`, `source_type`, `parser`, `parse_error`, `raw`, `uid`, `tenant_id` et `datasource_id`.
-- Les parsers multi-classes declarent leurs sorties dans `manifest.yaml` via `ocsf_outputs`, et routent chaque classe vers son index Quickwit.
+- A parsed event goes to its OCSF index and always retains the original log in the `raw` field.
+- An unparsed event does not go to an OCSF index: it is sent to `raw-logs` with `parse_status = "failed"`, `source_type`, `parser`, `parse_error`, `raw`, `uid`, `tenant_id`, and `datasource_id`.
+- Multi-class parsers declare their outputs in `manifest.yaml` via `ocsf_outputs` and route each class to its Quickwit index.
 
-### Convention collecteur / parser
+### Collector / parser convention
 
-- Le parser Vector ne porte que la normalisation : format brut canonique en entree, enrichissement minimal, mapping OCSF, routage Quickwit.
-- La recuperation des logs cloud/SaaS est la responsabilite d'un collecteur : API pull avec curseur, object storage + queue, Event Hub/EventBridge, ou Logpush HTTP quand le fournisseur sait pousser.
-- Pour les sources cloud, le format canonique recommande est JSON line-delimited. Le meme parser doit pouvoir traiter les lignes issues d'un collecteur API ou d'un export pousse si le schema source reste identique.
+- The Vector parser handles normalisation only: canonical raw format in, minimal enrichment, OCSF mapping, Quickwit routing.
+- Cloud/SaaS log retrieval is the responsibility of a collector: API pull with cursor, object storage + queue, Event Hub/EventBridge, or HTTP Logpush when the provider supports it.
+- For cloud sources, the recommended canonical format is newline-delimited JSON. The same parser must be able to process lines from either an API collector or a pushed export, provided the source schema is identical.
 
-Voir `_schema/README.md` pour le guide complet.
+See `_schema/README.md` for the full contribution guide.
+
+## License
+
+AGPL-3.0-or-later — the source remains open, as all things should be.
