@@ -2,7 +2,7 @@ name: Security — SAST
 
 on:
   push:
-    branches: ["main"]
+    branches: ["**"]
   pull_request:
   schedule:
     - cron: "0 3 * * 1"

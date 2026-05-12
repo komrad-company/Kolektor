@@ -2,6 +2,12 @@
 
 Deux workflows GitHub Actions independants.
 
+## Branching model
+
+- `develop` is the working branch. Feature branches are opened from `develop` and merged back into `develop`.
+- `main` is the release branch. Merging `develop` into `main` publishes the Docker image.
+- CI and SAST run on every pushed branch and on every pull request.
+
 ## 1. `ci.yml` — Build & Publish
 
 Chemin critique : si un maillon casse, pas d'image publiee.
@@ -16,7 +22,7 @@ coverage (Vector)  │
 
 - **catalog** : `python3 ci/catalog_index.py --check` verifie que `catalog/index.json` est synchronise avec `catalog/*/*/manifest.yaml` et `vector.toml`.
 - **Jobs Vector** (`validate`, `test`, `coverage`, `report`) : scripts `ci/*.sh`, conteneur `timberio/vector:0.54.0-debian`.
-- **publish** : `docker/build-push-action@v6` → `ghcr.io/komrad-company/kolektor:{sha,latest}`, declenche uniquement sur `main`.
+- **publish** : reusable Docker publish workflow -> `ghcr.io/komrad-company/kolektor:{sha,latest}`, declenche uniquement sur `main`.
 
 ## 2. `security.yml` — SAST
 
@@ -29,7 +35,7 @@ Jobs independants, sans `needs:`.
 
 `security-docker.yml` : hadolint + grype sur l'image construite depuis `Dockerfile`.
 
-Declencheurs : `push main`, `pull_request`, cron `0 3 * * 1` (lundi 3h UTC), `workflow_dispatch`.
+Declencheurs : `push` sur toutes les branches, `pull_request`, cron `0 3 * * 1` (lundi 3h UTC), `workflow_dispatch`.
 
 ## Conventions
 
@@ -38,4 +44,4 @@ Declencheurs : `push main`, `pull_request`, cron `0 3 * * 1` (lundi 3h UTC), `wo
 
 ## Gating cote branch protection
 
-Les jobs CI + SAST exposent des status checks que la branch protection rule de `main` peut exiger avant merge. Les workflows sont separes pour permettre de re-run un SAST sans rebuilder l'image.
+Les jobs CI + SAST exposent des status checks que les branch protection rules de `develop` et `main` peuvent exiger avant merge. Les workflows sont separes pour permettre de re-run un SAST sans rebuilder l'image.
