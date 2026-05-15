@@ -1,6 +1,6 @@
 # Kolektor — Vector.dev OCSF Config Catalog
 
-![CI](https://github.com/komrad-company/Kolektor/actions/workflows/ci.yml/badge.svg) ![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)
+![CI](https://github.com/komrad-company/Kolektor/actions/workflows/ci.yml/badge.svg) ![Release](https://img.shields.io/github/v/release/komrad-company/Kolektor) ![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)
 
 > *"Collection is not optional. The collective sees everything, or it sees nothing."*
 > — Komrad Engineering Collective, May 2026
