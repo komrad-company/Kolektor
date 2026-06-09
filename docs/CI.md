@@ -1,47 +1,39 @@
-# CI — Architecture d'execution
+# CI — Execution architecture
 
-Deux workflows GitHub Actions independants.
+One workflow: `.github/workflows/ci.yml`. Security gates first, as decreed
+by the collective — a failed audit blocks everything downstream.
 
 ## Branching model
 
 - `develop` is the working branch. Feature branches are opened from `develop` and merged back into `develop`.
-- `main` is the release branch. Merging `develop` into `main` publishes the Docker image.
-- CI and SAST run on every pushed branch and on every pull request.
+- `main` is the release branch.
+- CI runs on pushes to `main`/`develop` and `v*` tags, on every pull request, weekly (Monday 03:00 UTC) and on `workflow_dispatch`.
 
-## 1. `ci.yml` — Build & Publish
-
-Chemin critique : si un maillon casse, pas d'image publiee.
+## Pipeline
 
 ```
-catalog index ─────┐
-validate (Vector) ─┤
-test (Vector)      ├── publish (Docker push GHCR) [main only]
-coverage (Vector)  │
-                   └── report (rapport markdown Vector)
+security (gitleaks) ──┬── container_sast (hadolint + grype)──┐
+                      ├── catalog (index check)              ├── publish (container-pipeline)
+                      └── vector (validate + test            │
+                            + coverage + report)─────────────┘
 ```
 
-- **catalog** : `python3 ci/catalog_index.py --check` verifie que `catalog/index.json` est synchronise avec `catalog/*/*/manifest.yaml` et `vector.toml`.
-- **Jobs Vector** (`validate`, `test`, `coverage`, `report`) : scripts `ci/*.sh`, conteneur `timberio/vector:0.54.0-debian`.
-- **publish** : reusable Docker publish workflow -> `ghcr.io/komrad-company/kolektor:{sha,latest}`, declenche uniquement sur `main`.
-
-## 2. `security.yml` — SAST
-
-Jobs independants, sans `needs:`.
-
-| Job | Workflow reutilisable | Gate |
+| Job | What it does | Where it lives |
 |---|---|---|
-| `secrets` | `security-secrets.yml` (gitleaks) | exit-code 1 |
-| `docker` | `security-docker.yml` (hadolint + grype) | hadolint error / grype HIGH+ only-fixed |
+| `security` | gitleaks secret detection | reusable — `Kontinuous-integration/security-pipeline.yml@main` |
+| `container_sast` | hadolint on `Dockerfile`, grype (`--fail-on high`) on the built image | inline |
+| `catalog` | `python3 ci/catalog_index.py --check` — `catalog/index.json` in sync with manifests | inline |
+| `vector` | `ci/validate.sh`, `ci/test.sh`, `ci/coverage.sh` in `timberio/vector:0.54.0-debian`, then `ci/report.py` markdown artifact | inline |
+| `publish` | buildah build + push to `ghcr.io/komrad-company/kolektor` — PR: build only, `develop`: `sha-*` tag, `v*` tags: semver + `latest` | reusable — `Kontinuous-integration/container-pipeline.yml@main` |
 
-`security-docker.yml` : hadolint + grype sur l'image construite depuis `Dockerfile`.
+Vector-specific logic stays inline in this repository: it serves no other
+repo and does not belong in shared workflows. Shared concerns (secret
+detection, container build/publish) are consumed from
+`komrad-company/Kontinuous-integration`.
 
-Declencheurs : `push` sur toutes les branches, `pull_request`, cron `0 3 * * 1` (lundi 3h UTC), `workflow_dispatch`.
+## Branch protection gating
 
-## Conventions
-
-- `actions/checkout@v5`, `actions/upload-artifact@v5`.
-- Runners : `komrad-runners` quand les workflows reutilisables les utilisent.
-
-## Gating cote branch protection
-
-Les jobs CI + SAST exposent des status checks que les branch protection rules de `develop` et `main` peuvent exiger avant merge. Les workflows sont separes pour permettre de re-run un SAST sans rebuilder l'image.
+All jobs expose status checks that the branch protection rules of `develop`
+and `main` require before merge. The weekly schedule re-runs the full
+pipeline so a newly published CVE fails `container_sast` without waiting
+for a push.
