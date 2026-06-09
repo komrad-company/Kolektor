@@ -1,0 +1,16 @@
+.git
+.github
+.claude
+.codex
+.gitignore
+.gitleaks.toml
+.hadolint.yaml
+.dockerignore
+ci
+docs
+_schema
+*.md
+catalog/**/tests
+catalog/**/README.md
+LICENSE
+Dockerfile

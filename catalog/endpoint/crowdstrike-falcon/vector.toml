@@ -46,9 +46,16 @@ source = '''
     cs_severity_name = to_string(event.SeverityName) ?? ""
     ocsf_severity = if cs_severity_name == "Critical" { 5 } else if cs_severity_name == "High" { 4 } else if cs_severity_name == "Medium" { 3 } else if cs_severity_name == "Low" { 2 } else { 1 }
 
-    # Timestamp
-    ts_raw = to_int(meta.eventCreationTime) ?? to_int(event.ProcessStartTime) ?? null
-    ts = if ts_raw != null { ts_raw } else { to_unix_timestamp(now(), unit: "milliseconds") }
+    # Timestamp — explicit null checks (to_int(null)=0 is infallible, a ??
+    # chain never fires and yields time=0). eventCreationTime is epoch ms,
+    # ProcessStartTime is epoch seconds.
+    ts = to_unix_timestamp(now(), unit: "milliseconds")
+    if meta.eventCreationTime != null {
+      ts = to_int(meta.eventCreationTime) ?? ts
+    } else if event.ProcessStartTime != null {
+      start_s = to_int(event.ProcessStartTime) ?? 0
+      if start_s > 0 { ts = start_s * 1000 }
+    }
 
     .class_uid    = class_uid
     .category_uid = category_uid
@@ -57,9 +64,9 @@ source = '''
 
     # Use explicit null checks — to_int(null)=0 and to_string(null)="" are infallible,
     # so the ?? fallback never fires when the field is missing.
-    proc_name = if event.FileName != null { to_string!(event.FileName) } else if event.ImageFileName != null { to_string!(event.ImageFileName) } else { null }
-    proc_pid = if event.TargetProcessId != null { to_int!(event.TargetProcessId) } else if event.ProcessId != null { to_int!(event.ProcessId) } else { null }
-    actor_pid = if event.ParentProcessId != null { to_int!(event.ParentProcessId) } else { null }
+    proc_name = if event.FileName != null { to_string(event.FileName) ?? null } else if event.ImageFileName != null { to_string(event.ImageFileName) ?? null } else { null }
+    proc_pid = if event.TargetProcessId != null { to_int(event.TargetProcessId) ?? null } else if event.ProcessId != null { to_int(event.ProcessId) ?? null } else { null }
+    actor_pid = if event.ParentProcessId != null { to_int(event.ParentProcessId) ?? null } else { null }
 
     .actor = {
       "user": {
@@ -93,13 +100,17 @@ source = '''
       "port": to_int(event.RemotePort) ?? null
     }
 
+    # MITRE: TechniqueId is the code (T1003), Technique the human name.
+    analytic_uid  = if event.TechniqueId != null { to_string(event.TechniqueId) ?? null } else { null }
+    analytic_name = if event.Technique != null { to_string(event.Technique) ?? null } else { null }
+
     .finding_info = {
       "title":    to_string(event.DetectName) ?? to_string(event.DetectDescription) ?? null,
       "uid":      to_string(event.DetectId) ?? to_string(meta.eventId) ?? null,
       "types":    [to_string(event.Tactic) ?? ""],
       "analytic": {
-        "uid":  to_string(event.Technique) ?? null,
-        "name": to_string(event.TechniqueId) ?? null
+        "uid":  analytic_uid,
+        "name": analytic_name
       }
     }
 
@@ -152,17 +163,29 @@ condition = '.class_uid == 0'
 type   = "remap"
 inputs = ["crowdstrike_filter_failed"]
 source = '''
+  # A runtime abort in the normalize transform forwards the ORIGINAL event here
+  # (drop_on_error defaults to false): every field must be re-derived locally.
+  raw_val = .raw
+  if raw_val == null { raw_val = .message }
+  if raw_val == null { raw_val = encode_json(.) }
+  now_ms = to_unix_timestamp(now(), unit: "milliseconds")
+  uid_val = .uid
+  if uid_val == null { uid_val = uuid_v4() }
+  time_val = .time
+  if time_val == null { time_val = now_ms }
+  received_val = .received_time
+  if received_val == null { received_val = now_ms }
   . = {
-    "uid":           .uid,
-    "time":          .time,
-    "received_time": .received_time,
-    "tenant_id":     .tenant_id,
-    "datasource_id": .datasource_id,
+    "uid":           uid_val,
+    "time":          time_val,
+    "received_time": received_val,
+    "tenant_id":     "${TENANT_ID}",
+    "datasource_id": "${DATASOURCE_ID}",
     "source_type":   "endpoint/crowdstrike-falcon",
     "parser":        "crowdstrike-falcon",
     "parse_status":  "failed",
     "parse_error":   "crowdstrike_metadata_missing",
-    "raw":           .raw
+    "raw":           raw_val
   }
 '''
 

@@ -1,7 +1,9 @@
 # Hadolint rules intentionally ignored — each exception is justified.
-ignore:
-  - DL3005
-  # DL3005: apt-get upgrade is normally forbidden as non-reproducible.
-  # Exception: the base image timberio/vector:0.54.0-debian is not rebuilt
-  # on every Debian CVE. We upgrade intentionally to patch OS-level vulnerabilities.
-  # A downstream grype scan verifies that no HIGH+ fixable CVE remains.
+# NB: DL3005 (no apt-get upgrade) was removed from hadolint v2; the upgrade
+# in the Dockerfile remains a deliberate choice to patch OS CVEs on a base
+# image that is not rebuilt on every Debian advisory.
+ignored:
+  - DL3008
+  # DL3008: apt-get install without pinned versions. Pinning curl to a Debian
+  # point-release version breaks on every base refresh; the digest-pinned base
+  # plus the downstream grype scan provide the reproducibility guarantee.

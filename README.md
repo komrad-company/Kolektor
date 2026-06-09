@@ -30,7 +30,7 @@ kolektor/
 │
 ├── Dockerfile              # Vector image + embedded catalogue
 ├── entrypoint.sh           # Selects the config via $SOURCE_TYPE
-├── .github/workflows/ci.yml # Pipeline: validate → test → coverage → build → push ghcr.io
+├── .github/workflows/ci.yml # Pipeline: validate → test → coverage → publish on main
 │
 ├── _schema/
 │   ├── template.toml       # Commented empty template (copy for new source)
@@ -113,7 +113,9 @@ docker run -e SOURCE_TYPE=linux/syslog \
 docker run kolektor
 ```
 
-The image is built by GitHub Actions (docker/build-push-action) and pushed to `ghcr.io/komrad-company/kolektor` on every merge to `main` (tags `latest` + `<sha>`).
+The image is built by GitHub Actions and pushed to `ghcr.io/komrad-company/kolektor`
+on every merge to `main` (tags `latest` + `<sha>`). Branches such as `develop`
+run catalogue, Vector, and security checks without publishing an image.
 
 
 ## Target Quickwit indexes
@@ -137,16 +139,18 @@ The image is built by GitHub Actions (docker/build-push-action) and pushed to `g
 | test     | `vector test` (config + tests merged)            | vector:0.54.0-debian      |
 | coverage | Enforces >= 3 tests per source                   | vector:0.54.0-debian      |
 | report   | Generates markdown report as artifact            | ubuntu-latest + python    |
-| build    | docker/build-push-action → ghcr.io (main only)  | ubuntu-latest             |
+| publish  | reusable Docker publish workflow -> ghcr.io (main only) | ubuntu-latest             |
 
 ## Contributing
 
-1. Copy `_schema/template.toml` → `catalog/<category>/<source>/vector.toml`
-2. Write the VRL parsing and OCSF normalisation logic
-3. Add >= 3 tests in `tests/` using real raw log samples
-4. Add a `README.md` documenting the source
-5. Run `ci/catalog_index.py` + `ci/validate.sh` + `ci/test.sh` to validate locally
-6. Push — CI validates automatically
+1. Branch from `develop`
+2. Copy `_schema/template.toml` → `catalog/<category>/<source>/vector.toml`
+3. Write the VRL parsing and OCSF normalisation logic
+4. Add >= 3 tests in `tests/` using real raw log samples
+5. Add a `README.md` documenting the source
+6. Run `ci/catalog_index.py` + `ci/validate.sh` + `ci/test.sh` to validate locally
+7. Open the pull request against `develop`
+8. Merge `develop` into `main` only when the change is ready to publish
 
 ### Raw / parsing convention
 

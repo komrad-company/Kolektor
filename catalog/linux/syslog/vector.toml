@@ -39,7 +39,7 @@ source = '''
   hostname = .hostname
   facility = .facility
   procid_val = .procid
-  procid_int = if procid_val != null { to_int!(procid_val) } else { null }
+  procid_int = if procid_val != null { to_int(procid_val) ?? null } else { null }
 
   .class_uid    = 6001
   .category_uid = 6
@@ -73,7 +73,7 @@ source = '''
 
   # Full raw line (syslog header + message) + unique identifier
   _ts  = to_string(.timestamp) ?? ""
-  _pid = if procid_val != null { "[" + to_string!(procid_val) + "]" } else { "" }
+  _pid = if procid_val != null { "[" + (to_string(procid_val) ?? "") + "]" } else { "" }
   _msg = to_string(.message)   ?? ""
   .raw = _ts + " " + (string(.hostname) ?? "") + " " + (string(.appname) ?? "") + _pid + ": " + _msg
   .uid = uuid_v4()
@@ -107,17 +107,29 @@ condition = '.class_uid != 6001 || .raw == null || .raw == ""'
 type   = "remap"
 inputs = ["syslog_filter_failed"]
 source = '''
+  # A runtime abort in the normalize transform forwards the ORIGINAL event here
+  # (drop_on_error defaults to false): every field must be re-derived locally.
+  raw_val = .raw
+  if raw_val == null { raw_val = .message }
+  if raw_val == null { raw_val = encode_json(.) }
+  now_ms = to_unix_timestamp(now(), unit: "milliseconds")
+  uid_val = .uid
+  if uid_val == null { uid_val = uuid_v4() }
+  time_val = .time
+  if time_val == null { time_val = now_ms }
+  received_val = .received_time
+  if received_val == null { received_val = now_ms }
   . = {
-    "uid":           .uid,
-    "time":          .time,
-    "received_time": .received_time,
-    "tenant_id":     .tenant_id,
-    "datasource_id": .datasource_id,
+    "uid":           uid_val,
+    "time":          time_val,
+    "received_time": received_val,
+    "tenant_id":     "${TENANT_ID}",
+    "datasource_id": "${DATASOURCE_ID}",
     "source_type":   "linux/syslog",
     "parser":        "syslog",
     "parse_status":  "failed",
     "parse_error":   "syslog_empty_raw",
-    "raw":           .raw
+    "raw":           raw_val
   }
 '''
 

@@ -2,8 +2,12 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main, develop]
+    tags: ["v*"]
   pull_request:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -11,27 +15,69 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  catalog:
+  security:
+    uses: komrad-company/Kontinuous-integration/.github/workflows/security-pipeline.yml@main
+
+  container_sast:
+    needs: security
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: hadolint
+        run: docker run --rm -v "$PWD":/repo -w /repo hadolint/hadolint:v2.12.0 hadolint --config .hadolint.yaml Dockerfile
+      - name: Build image
+        run: docker build -t kolektor:scan .
+      - name: grype scan
+        run: |
+          curl -sSfL https://get.anchore.io/grype | sh -s -- -b /usr/local/bin v0.114.0
+          grype kolektor:scan --fail-on high --only-fixed
+
+  catalog:
+    needs: security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install PyYAML
+        run: pip install pyyaml
       - name: Check generated catalog index
         run: python3 ci/catalog_index.py --check
 
   vector:
-    uses: komrad-company/workflows/.github/workflows/vector-checks.yml@main
-    with:
-      vector-image: timberio/vector:0.54.0-debian
-    secrets: inherit
+    needs: security
+    runs-on: ubuntu-latest
+    env:
+      VECTOR_IMAGE: timberio/vector:0.54.0-debian
+    steps:
+      - uses: actions/checkout@v5
+      # --user keeps ci/results owned by the runner so report.py can write into
+      # it; the data-dir mount gives vector validate a writable /var/lib/vector.
+      - name: Vector validate
+        run: |
+          mkdir -p "$RUNNER_TEMP/vector-data"
+          docker run --rm --user "$(id -u):$(id -g)" -v "$RUNNER_TEMP/vector-data":/var/lib/vector -v "$PWD":/repo -w /repo --entrypoint bash "$VECTOR_IMAGE" ci/validate.sh
+      - name: Vector test
+        run: |
+          mkdir -p "$RUNNER_TEMP/vector-data"
+          docker run --rm --user "$(id -u):$(id -g)" -v "$RUNNER_TEMP/vector-data":/var/lib/vector -v "$PWD":/repo -w /repo --entrypoint bash "$VECTOR_IMAGE" ci/test.sh
+      - name: Test coverage
+        run: bash ci/coverage.sh
+      - name: Markdown report
+        if: always()
+        run: python3 ci/report.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vector-ci-report
+          path: ci/results/
 
   publish:
-    needs: [catalog, vector]
-    if: github.ref == 'refs/heads/main'
-    uses: komrad-company/workflows/.github/workflows/docker-publish.yml@main
+    needs: [container_sast, catalog, vector]
+    permissions:
+      contents: read
+      packages: write
+    uses: komrad-company/Kontinuous-integration/.github/workflows/container-pipeline.yml@main
     with:
-      context: .
-      image: ghcr.io/komrad-company/kolektor
-    secrets: inherit
+      image: kolektor
+      containerfile: ./Dockerfile
