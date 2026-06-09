@@ -23,11 +23,23 @@ source = '''
   .datasource_id = "${DATASOURCE_ID}"
   .received_time = to_unix_timestamp(now(), unit: "milliseconds")
 
-  # Winlogbeat JSON structure :
-  # .winlog.event_id, .winlog.event_data.*, .winlog.computer_name, .timestamp
-  event_id = to_int(.winlog.event_id) ?? to_int(.event_id) ?? 0
+  # Winlogbeat JSON structure: .winlog.event_id, .winlog.event_data.*,
+  # .winlog.computer_name, .timestamp — NXLog ships the same fields at the
+  # top level. Explicit null checks: to_int(null)=0 / to_string(null)=""
+  # are infallible, so a ?? chain never reaches the NXLog fallback.
+  event_id = 0
+  if .winlog.event_id != null {
+    event_id = to_int(.winlog.event_id) ?? 0
+  } else if .event_id != null {
+    event_id = to_int(.event_id) ?? 0
+  }
   event_data = object(.winlog.event_data) ?? object(.event_data) ?? {}
-  computer = to_string(.winlog.computer_name) ?? to_string(.computer_name) ?? "unknown"
+  computer = "unknown"
+  if .winlog.computer_name != null {
+    computer = to_string(.winlog.computer_name) ?? "unknown"
+  } else if .computer_name != null {
+    computer = to_string(.computer_name) ?? "unknown"
+  }
 
   # Timestamp
   ts_str = to_string(.timestamp) ?? null
@@ -96,7 +108,9 @@ source = '''
     "hostname": computer
   }
 
-  .auth_protocol_id = logon_type
+  # Windows LogonType (2=Interactive, 3=Network...) maps to OCSF
+  # logon_type_id — NOT auth_protocol_id (1=NTLM, 2=Kerberos...).
+  .logon_type_id = logon_type
 
   .process = {
     "name":     process_name,

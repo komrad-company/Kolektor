@@ -46,9 +46,16 @@ source = '''
     cs_severity_name = to_string(event.SeverityName) ?? ""
     ocsf_severity = if cs_severity_name == "Critical" { 5 } else if cs_severity_name == "High" { 4 } else if cs_severity_name == "Medium" { 3 } else if cs_severity_name == "Low" { 2 } else { 1 }
 
-    # Timestamp
-    ts_raw = to_int(meta.eventCreationTime) ?? to_int(event.ProcessStartTime) ?? null
-    ts = if ts_raw != null { ts_raw } else { to_unix_timestamp(now(), unit: "milliseconds") }
+    # Timestamp — explicit null checks (to_int(null)=0 is infallible, a ??
+    # chain never fires and yields time=0). eventCreationTime is epoch ms,
+    # ProcessStartTime is epoch seconds.
+    ts = to_unix_timestamp(now(), unit: "milliseconds")
+    if meta.eventCreationTime != null {
+      ts = to_int(meta.eventCreationTime) ?? ts
+    } else if event.ProcessStartTime != null {
+      start_s = to_int(event.ProcessStartTime) ?? 0
+      if start_s > 0 { ts = start_s * 1000 }
+    }
 
     .class_uid    = class_uid
     .category_uid = category_uid
@@ -93,13 +100,17 @@ source = '''
       "port": to_int(event.RemotePort) ?? null
     }
 
+    # MITRE: TechniqueId is the code (T1003), Technique the human name.
+    analytic_uid  = if event.TechniqueId != null { to_string(event.TechniqueId) ?? null } else { null }
+    analytic_name = if event.Technique != null { to_string(event.Technique) ?? null } else { null }
+
     .finding_info = {
       "title":    to_string(event.DetectName) ?? to_string(event.DetectDescription) ?? null,
       "uid":      to_string(event.DetectId) ?? to_string(meta.eventId) ?? null,
       "types":    [to_string(event.Tactic) ?? ""],
       "analytic": {
-        "uid":  to_string(event.Technique) ?? null,
-        "name": to_string(event.TechniqueId) ?? null
+        "uid":  analytic_uid,
+        "name": analytic_name
       }
     }
 
