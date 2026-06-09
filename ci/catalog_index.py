@@ -71,11 +71,13 @@ def parser_entry(source_dir: Path) -> dict[str, Any]:
 
 
 def build_index() -> dict[str, Any]:
-    entries = [
-        parser_entry(path.parent)
-        for path in sorted(CATALOG_DIR.glob("*/*/manifest.yaml"))
-        if (path.parent / "vector.toml").exists()
-    ]
+    entries = []
+    for path in sorted(CATALOG_DIR.glob("*/*/manifest.yaml")):
+        if not (path.parent / "vector.toml").exists():
+            sys.exit(f"{path.parent.relative_to(ROOT)}: manifest.yaml without vector.toml")
+        entries.append(parser_entry(path.parent))
+    if not entries:
+        sys.exit(f"no parsers found under {CATALOG_DIR.relative_to(ROOT)}/")
     return {"version": 1, "parsers": entries}
 
 
@@ -88,7 +90,8 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="fail if index is stale")
     args = parser.parse_args()
 
-    content = encode(build_index())
+    index = build_index()
+    content = encode(index)
 
     if args.check:
         if not INDEX_PATH.exists():
@@ -98,6 +101,7 @@ def main() -> int:
         if current != content:
             print(f"{INDEX_PATH} is stale; run ci/catalog_index.py", file=sys.stderr)
             return 1
+        print(f"{INDEX_PATH.relative_to(ROOT)} in sync — {len(index['parsers'])} parsers checked")
         return 0
 
     INDEX_PATH.write_text(content, encoding="utf-8")
