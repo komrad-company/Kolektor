@@ -8,7 +8,6 @@
 .dockerignore
 ci
 docs
-init
 _schema
 *.md
 catalog/**/tests

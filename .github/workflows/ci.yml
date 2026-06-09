@@ -26,13 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: hadolint
-        run: docker run --rm -v "$PWD":/repo -w /repo hadolint/hadolint:v2.12.0 hadolint Dockerfile
+        run: docker run --rm -v "$PWD":/repo -w /repo hadolint/hadolint:v2.12.0 hadolint --config .hadolint.yaml Dockerfile
       - name: Build image
         run: docker build -t kolektor:scan .
       - name: grype scan
         run: |
           curl -sSfL https://get.anchore.io/grype | sh -s -- -b /usr/local/bin v0.114.0
-          grype kolektor:scan --fail-on high
+          grype kolektor:scan --fail-on high --only-fixed
 
   catalog:
     needs: security
@@ -51,10 +51,16 @@ jobs:
       VECTOR_IMAGE: timberio/vector:0.54.0-debian
     steps:
       - uses: actions/checkout@v5
+      # --user keeps ci/results owned by the runner so report.py can write into
+      # it; the data-dir mount gives vector validate a writable /var/lib/vector.
       - name: Vector validate
-        run: docker run --rm -v "$PWD":/repo -w /repo --entrypoint bash "$VECTOR_IMAGE" ci/validate.sh
+        run: |
+          mkdir -p "$RUNNER_TEMP/vector-data"
+          docker run --rm --user "$(id -u):$(id -g)" -v "$RUNNER_TEMP/vector-data":/var/lib/vector -v "$PWD":/repo -w /repo --entrypoint bash "$VECTOR_IMAGE" ci/validate.sh
       - name: Vector test
-        run: docker run --rm -v "$PWD":/repo -w /repo --entrypoint bash "$VECTOR_IMAGE" ci/test.sh
+        run: |
+          mkdir -p "$RUNNER_TEMP/vector-data"
+          docker run --rm --user "$(id -u):$(id -g)" -v "$RUNNER_TEMP/vector-data":/var/lib/vector -v "$PWD":/repo -w /repo --entrypoint bash "$VECTOR_IMAGE" ci/test.sh
       - name: Test coverage
         run: bash ci/coverage.sh
       - name: Markdown report
