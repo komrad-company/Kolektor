@@ -26,7 +26,7 @@ source = '''
   hostname = string(.hostname) ?? ""
   app      = string(.appname) ?? ""
   pid_raw  = .procid
-  pid      = if pid_raw != null { to_int!(pid_raw) } else { null }
+  pid      = if pid_raw != null { to_int(pid_raw) ?? null } else { null }
   msg      = string!(.message)
   raw_msg  = msg
 
@@ -54,7 +54,7 @@ source = '''
   user_name = if ssh_accept.user != null { ssh_accept.user } else if ssh_fail.user != null { ssh_fail.user } else if sudo_match.user != null { sudo_match.user } else { null }
   src_ip = if ssh_accept.ip != null { ssh_accept.ip } else if ssh_fail.ip != null { ssh_fail.ip } else { null }
   src_port_raw = if ssh_accept.port != null { ssh_accept.port } else if ssh_fail.port != null { ssh_fail.port } else { null }
-  src_port = if src_port_raw != null { to_int!(src_port_raw) } else { null }
+  src_port = if src_port_raw != null { to_int(src_port_raw) ?? null } else { null }
   auth_method = if ssh_accept.method != null { ssh_accept.method } else if ssh_fail.method != null { ssh_fail.method } else { null }
 
   # Severity and status
@@ -118,7 +118,7 @@ source = '''
   }
 
   # Full raw line (syslog header + message) + unique identifier
-  _pid = if pid_raw != null { "[" + to_string!(pid_raw) + "]" } else { "" }
+  _pid = if pid_raw != null { "[" + (to_string(pid_raw) ?? "") + "]" } else { "" }
   _ts  = to_string(.timestamp) ?? ""
   .raw = _ts + " " + hostname + " " + app + _pid + ": " + raw_msg
   .uid = uuid_v4()
@@ -151,17 +151,29 @@ condition = '.class_uid != 3002'
 type   = "remap"
 inputs = ["authlog_filter_failed"]
 source = '''
+  # A runtime abort in the normalize transform forwards the ORIGINAL event here
+  # (drop_on_error defaults to false): every field must be re-derived locally.
+  raw_val = .raw
+  if raw_val == null { raw_val = .message }
+  if raw_val == null { raw_val = encode_json(.) }
+  now_ms = to_unix_timestamp(now(), unit: "milliseconds")
+  uid_val = .uid
+  if uid_val == null { uid_val = uuid_v4() }
+  time_val = .time
+  if time_val == null { time_val = now_ms }
+  received_val = .received_time
+  if received_val == null { received_val = now_ms }
   . = {
-    "uid":           .uid,
-    "time":          .time,
-    "received_time": .received_time,
-    "tenant_id":     .tenant_id,
-    "datasource_id": .datasource_id,
+    "uid":           uid_val,
+    "time":          time_val,
+    "received_time": received_val,
+    "tenant_id":     "${TENANT_ID}",
+    "datasource_id": "${DATASOURCE_ID}",
     "source_type":   "linux/auth-log",
     "parser":        "auth-log",
     "parse_status":  "failed",
     "parse_error":   "auth_log_pattern_unmatched",
-    "raw":           .raw
+    "raw":           raw_val
   }
 '''
 

@@ -71,7 +71,7 @@ source = '''
   uid_val = pairs.uid
   auid_val = pairs.auid
   pid_raw = pairs.pid
-  pid_val = if pid_raw != null { to_int!(pid_raw) } else { null }
+  pid_val = if pid_raw != null { to_int(pid_raw) ?? null } else { null }
   comm_val = pairs.comm
   proctitle_val = pairs.proctitle
 
@@ -159,17 +159,29 @@ condition = '.class_uid != 1003 && .class_uid != 3002'
 type   = "remap"
 inputs = ["auditd_filter_failed"]
 source = '''
+  # A runtime abort in the normalize transform forwards the ORIGINAL event here
+  # (drop_on_error defaults to false): every field must be re-derived locally.
+  raw_val = .raw
+  if raw_val == null { raw_val = .message }
+  if raw_val == null { raw_val = encode_json(.) }
+  now_ms = to_unix_timestamp(now(), unit: "milliseconds")
+  uid_val = .uid
+  if uid_val == null { uid_val = uuid_v4() }
+  time_val = .time
+  if time_val == null { time_val = now_ms }
+  received_val = .received_time
+  if received_val == null { received_val = now_ms }
   . = {
-    "uid":           .uid,
-    "time":          .time,
-    "received_time": .received_time,
-    "tenant_id":     .tenant_id,
-    "datasource_id": .datasource_id,
+    "uid":           uid_val,
+    "time":          time_val,
+    "received_time": received_val,
+    "tenant_id":     "${TENANT_ID}",
+    "datasource_id": "${DATASOURCE_ID}",
     "source_type":   "linux/auditd",
     "parser":        "auditd",
     "parse_status":  "failed",
     "parse_error":   "auditd_type_unsupported",
-    "raw":           .raw
+    "raw":           raw_val
   }
 '''
 

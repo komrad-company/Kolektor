@@ -75,10 +75,10 @@ source = '''
 
     srcip = kv.srcip
     srcport_raw = kv.srcport
-    srcport = if srcport_raw != null { to_int!(srcport_raw) } else { null }
+    srcport = if srcport_raw != null { to_int(srcport_raw) ?? null } else { null }
     dstip = kv.dstip
     dstport_raw = kv.dstport
-    dstport = if dstport_raw != null { to_int!(dstport_raw) } else { null }
+    dstport = if dstport_raw != null { to_int(dstport_raw) ?? null } else { null }
 
     .src_endpoint = {
       "ip":   srcip,
@@ -90,7 +90,7 @@ source = '''
     }
 
     proto_raw = kv.proto
-    proto_num = if proto_raw != null { to_int!(proto_raw) } else { null }
+    proto_num = if proto_raw != null { to_int(proto_raw) ?? null } else { null }
     service_name = kv.service
     direction_val = kv.direction
 
@@ -104,10 +104,10 @@ source = '''
     sentbyte_raw = kv.sentbyte
     rcvdpkt_raw = kv.rcvdpkt
     sentpkt_raw = kv.sentpkt
-    bytes_in = if rcvdbyte_raw != null { to_int!(rcvdbyte_raw) } else { null }
-    bytes_out = if sentbyte_raw != null { to_int!(sentbyte_raw) } else { null }
-    packets_in = if rcvdpkt_raw != null { to_int!(rcvdpkt_raw) } else { null }
-    packets_out = if sentpkt_raw != null { to_int!(sentpkt_raw) } else { null }
+    bytes_in = if rcvdbyte_raw != null { to_int(rcvdbyte_raw) ?? null } else { null }
+    bytes_out = if sentbyte_raw != null { to_int(sentbyte_raw) ?? null } else { null }
+    packets_in = if rcvdpkt_raw != null { to_int(rcvdpkt_raw) ?? null } else { null }
+    packets_out = if sentpkt_raw != null { to_int(sentpkt_raw) ?? null } else { null }
 
     .traffic = {
       "bytes_in":    bytes_in,
@@ -132,7 +132,7 @@ source = '''
     srcintf_val = kv.srcintf
     dstintf_val = kv.dstintf
     duration_raw = kv.duration
-    duration_val = if duration_raw != null { to_int!(duration_raw) } else { null }
+    duration_val = if duration_raw != null { to_int(duration_raw) ?? null } else { null }
     appcat_val = kv.appcat
     app_val = kv.app
 
@@ -182,17 +182,29 @@ condition = '.class_uid != 4001'
 type   = "remap"
 inputs = ["fortigate_filter_failed"]
 source = '''
+  # A runtime abort in the normalize transform forwards the ORIGINAL event here
+  # (drop_on_error defaults to false): every field must be re-derived locally.
+  raw_val = .raw
+  if raw_val == null { raw_val = .message }
+  if raw_val == null { raw_val = encode_json(.) }
+  now_ms = to_unix_timestamp(now(), unit: "milliseconds")
+  uid_val = .uid
+  if uid_val == null { uid_val = uuid_v4() }
+  time_val = .time
+  if time_val == null { time_val = now_ms }
+  received_val = .received_time
+  if received_val == null { received_val = now_ms }
   . = {
-    "uid":           .uid,
-    "time":          .time,
-    "received_time": .received_time,
-    "tenant_id":     .tenant_id,
-    "datasource_id": .datasource_id,
+    "uid":           uid_val,
+    "time":          time_val,
+    "received_time": received_val,
+    "tenant_id":     "${TENANT_ID}",
+    "datasource_id": "${DATASOURCE_ID}",
     "source_type":   "network/fortinet-fortigate",
     "parser":        "fortigate",
     "parse_status":  "failed",
     "parse_error":   "fortigate_key_value_invalid",
-    "raw":           .raw
+    "raw":           raw_val
   }
 '''
 

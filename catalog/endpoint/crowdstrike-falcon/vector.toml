@@ -57,9 +57,9 @@ source = '''
 
     # Use explicit null checks — to_int(null)=0 and to_string(null)="" are infallible,
     # so the ?? fallback never fires when the field is missing.
-    proc_name = if event.FileName != null { to_string!(event.FileName) } else if event.ImageFileName != null { to_string!(event.ImageFileName) } else { null }
-    proc_pid = if event.TargetProcessId != null { to_int!(event.TargetProcessId) } else if event.ProcessId != null { to_int!(event.ProcessId) } else { null }
-    actor_pid = if event.ParentProcessId != null { to_int!(event.ParentProcessId) } else { null }
+    proc_name = if event.FileName != null { to_string(event.FileName) ?? null } else if event.ImageFileName != null { to_string(event.ImageFileName) ?? null } else { null }
+    proc_pid = if event.TargetProcessId != null { to_int(event.TargetProcessId) ?? null } else if event.ProcessId != null { to_int(event.ProcessId) ?? null } else { null }
+    actor_pid = if event.ParentProcessId != null { to_int(event.ParentProcessId) ?? null } else { null }
 
     .actor = {
       "user": {
@@ -152,17 +152,29 @@ condition = '.class_uid == 0'
 type   = "remap"
 inputs = ["crowdstrike_filter_failed"]
 source = '''
+  # A runtime abort in the normalize transform forwards the ORIGINAL event here
+  # (drop_on_error defaults to false): every field must be re-derived locally.
+  raw_val = .raw
+  if raw_val == null { raw_val = .message }
+  if raw_val == null { raw_val = encode_json(.) }
+  now_ms = to_unix_timestamp(now(), unit: "milliseconds")
+  uid_val = .uid
+  if uid_val == null { uid_val = uuid_v4() }
+  time_val = .time
+  if time_val == null { time_val = now_ms }
+  received_val = .received_time
+  if received_val == null { received_val = now_ms }
   . = {
-    "uid":           .uid,
-    "time":          .time,
-    "received_time": .received_time,
-    "tenant_id":     .tenant_id,
-    "datasource_id": .datasource_id,
+    "uid":           uid_val,
+    "time":          time_val,
+    "received_time": received_val,
+    "tenant_id":     "${TENANT_ID}",
+    "datasource_id": "${DATASOURCE_ID}",
     "source_type":   "endpoint/crowdstrike-falcon",
     "parser":        "crowdstrike-falcon",
     "parse_status":  "failed",
     "parse_error":   "crowdstrike_metadata_missing",
-    "raw":           .raw
+    "raw":           raw_val
   }
 '''
 
