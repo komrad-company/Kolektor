@@ -48,13 +48,19 @@ source = '''
     "user_agent":         to_string(.UserAgent)        ?? null
   }
 
+  class_uid    = if valid { 6001 } else { 0 }
+  category_uid = if valid { 6 } else { 0 }
+  severity_id  = if !valid { 0 } else if is_failure { 3 } else { 1 }
+  status       = if is_failure { "Failure" } else { "Success" }
+  status_id    = if is_failure { 2 } else { 1 }
+
   . = {
-    "class_uid":    if valid { 6001 } else { 0 },
-    "category_uid": if valid { 6 } else { 0 },
-    "severity_id":  if !valid { 0 } else if is_failure { 3 } else { 1 },
+    "class_uid":    class_uid,
+    "category_uid": category_uid,
+    "severity_id":  severity_id,
     "time":         ts,
-    "status":       if is_failure { "Failure" } else { "Success" },
-    "status_id":    if is_failure { 2 } else { 1 },
+    "status":       status,
+    "status_id":    status_id,
     "api": {
       "operation": operation,
       "service":   { "name": workload },
