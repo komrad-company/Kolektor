@@ -43,6 +43,11 @@ source = '''
 
   # Parse all key=value pairs after the header
   kv_part = replace(raw_msg, r'^type=[A-Z_]+ msg=audit\([^)]+\): ?', "")
+  # USER_* records nest their fields inside msg='op=... res=...':
+  # parse_key_value treats the single quote as a quoting char and swallows
+  # the whole block as one value (res/hostname/addr become unreachable).
+  # Stripping the quotes promotes the inner pairs to the top level.
+  kv_part = replace(kv_part, "'", "")
   pairs = parse_key_value(kv_part, key_value_delimiter: "=", field_delimiter: " ") ?? {}
 
   # Determine OCSF class from auditd type

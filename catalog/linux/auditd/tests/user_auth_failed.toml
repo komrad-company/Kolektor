@@ -1,0 +1,23 @@
+[[tests]]
+name = "auditd — USER_AUTH failure (sshd) is medium severity with source endpoint"
+
+[[tests.inputs]]
+insert_at = "auditd_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = "type=USER_AUTH msg=audit(1713091622.118:912): pid=2110 uid=0 auid=4294967295 ses=4294967295 msg='op=PAM:authentication grantors=? acct=\"root\" exe=\"/usr/sbin/sshd\" hostname=203.0.113.50 addr=203.0.113.50 terminal=ssh res=failed'"
+
+[[tests.outputs]]
+extract_from = "auditd_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3002)
+  assert_eq!(.severity_id, 3)
+  assert_eq!(.src_endpoint.ip, "203.0.113.50")
+  assert_eq!(.src_endpoint.hostname, "203.0.113.50")
+  assert_eq!(.unmapped.audit_type, "USER_AUTH")
+  assert!(exists(.raw))
+'''
