@@ -107,5 +107,9 @@
       "tenant_id",
       "datasource_id"
     ]
+  },
+  "retention": {
+    "period": "90 days",
+    "schedule": "daily"
   }
 }

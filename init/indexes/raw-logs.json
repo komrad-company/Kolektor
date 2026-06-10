@@ -84,5 +84,9 @@
       "parse_error",
       "raw"
     ]
+  },
+  "retention": {
+    "period": "30 days",
+    "schedule": "daily"
   }
 }

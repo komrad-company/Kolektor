@@ -43,12 +43,16 @@ jobs:
         run: pip install pyyaml
       - name: Check generated catalog index
         run: python3 ci/catalog_index.py --check
+      - name: Lint VRL antipatterns
+        run: python3 ci/lint_vrl.py
+      - name: Validate OCSF coherence
+        run: python3 ci/validate_ocsf.py
 
   vector:
     needs: security
     runs-on: ubuntu-latest
     env:
-      VECTOR_IMAGE: timberio/vector:0.54.0-debian
+      VECTOR_IMAGE: timberio/vector:0.55.0-debian
     steps:
       - uses: actions/checkout@v5
       # --user keeps ci/results owned by the runner so report.py can write into
