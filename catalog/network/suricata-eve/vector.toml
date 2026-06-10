@@ -10,7 +10,7 @@
 type    = "file"
 include = ["${SURICATA_EVE_LOG:-/var/log/suricata/eve.json}"]
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.suricata_parse_and_normalize]
 type   = "remap"
 inputs = ["suricata_input"]
@@ -280,7 +280,7 @@ batch.timeout_secs  = 5
 [sinks.suricata_quickwit_dns.request]
 headers.Content-Type = "application/x-ndjson"
 
-# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+# --- SINK : Quickwit raw-logs (parsing failures only) ---
 [sinks.suricata_quickwit_raw_failed]
 type                = "http"
 inputs              = ["suricata_raw_failed"]

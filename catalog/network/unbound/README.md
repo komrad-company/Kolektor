@@ -1,47 +1,47 @@
 # Unbound DNS (OPNsense) — query log
 
 ## Description
-Collecte les requetes DNS resolvees par Unbound sur OPNsense, forwardees via syslog.
-Normalise en OCSF classe 4003 (DNS Activity), activity `Query`.
+Collects DNS queries resolved by Unbound on OPNsense, forwarded over syslog.
+Normalized to OCSF class 4003 (DNS Activity), activity `Query`.
 
-## Format attendu
-Format natif unbound (verbosity >= 1, `log-queries: yes`) :
+## Expected format
+Native unbound format (verbosity >= 1, `log-queries: yes`):
 ```
 [1713091425] unbound[12345:0] info: 10.0.0.5 example.com. A IN
 ```
 
-Le parseur accepte aussi la variante sans prefix unbound (certains forwarders syslog tronquent) :
+The parser also accepts the variant without the unbound prefix (some syslog forwarders truncate it):
 ```
 info: 10.0.0.5 example.com. A IN
 ```
 
-Une ligne = une requete DNS observee. Les lignes `resolving`, `reply from`, `response for` sont ignorees (drop via filter_valid).
+One line = one observed DNS query. The `resolving`, `reply from`, `response for` lines are ignored (dropped via filter_valid).
 
-## Configuration cote source
+## Source-side configuration
 
 ### OPNsense — Services > Unbound DNS > General
-- **Log level verbosity** : `Level 1 (Info)` minimum
-- **Log queries** : coche
-- Optionnel : Log replies, Log tag queryreply
+- **Log level verbosity**: `Level 1 (Info)` minimum
+- **Log queries**: checked
+- Optional: Log replies, Log tag queryreply
 
 ### OPNsense — System > Settings > Logging / targets
-Ajouter une cible Remote Syslog :
-- **Transport** : TCP
-- **Hostname/IP** : `<vector-host>`
-- **Port** : `5144` (par defaut de ce parser)
-- **Facility** : `local7` (ou celui utilise par unbound)
-- **Selection** : cocher `DNS (Unbound)`
+Add a Remote Syslog target:
+- **Transport**: TCP
+- **Hostname/IP**: `<vector-host>`
+- **Port**: `5144` (this parser's default)
+- **Facility**: `local7` (or the one used by unbound)
+- **Selection**: check `DNS (Unbound)`
 
 ## Variables
 | Variable          | Default | Description                                 |
 |-------------------|---------|---------------------------------------------|
-| `LISTEN_PORT`     | `5144`  | Port TCP syslog                             |
-| `TENANT_ID`       | -       | Injecte runtime                             |
-| `DATASOURCE_ID`   | -       | Injecte runtime                             |
-| `QUICKWIT_ENDPOINT` | -     | Injecte runtime                             |
+| `LISTEN_PORT`     | `5144`  | TCP syslog port                             |
+| `TENANT_ID`       | -       | Injected at runtime                         |
+| `DATASOURCE_ID`   | -       | Injected at runtime                         |
+| `QUICKWIT_ENDPOINT` | -     | Injected at runtime                         |
 
-## Mapping OCSF
-| Champ Unbound   | Champ OCSF             |
+## OCSF mapping
+| Unbound field   | OCSF field             |
 |-----------------|------------------------|
 | client IP       | `src_endpoint.ip`      |
 | QNAME           | `query.hostname`       |
@@ -50,10 +50,10 @@ Ajouter une cible Remote Syslog :
 | syslog ts       | `time`                 |
 | -               | `activity_id = 1` (Query) |
 
-## Limites connues
-- Le parser ne capture que les requetes (pas les reponses ni les blocages de blocklist) — une requete bloquee apparait d'abord comme Query puis comme reponse NXDOMAIN (non capturee ici). Suffisant pour le threat hunting de domaines resolus.
-- Le timestamp Unix dans `[1713091425]` est ignore au profit du timestamp syslog (plus fiable apres relay).
+## Known limits
+- The parser captures only queries (not responses nor blocklist blocks) — a blocked query first appears as a Query then as an NXDOMAIN response (not captured here). Sufficient for threat hunting on resolved domains.
+- The Unix timestamp in `[1713091425]` is ignored in favor of the syslog timestamp (more reliable after relay).
 
-## Liens
+## Links
 - [Unbound logging docs](https://unbound.docs.nlnetlabs.nl/en/latest/manpages/unbound.conf.html#logging)
 - [OCSF 4003 DNS Activity](https://schema.ocsf.io/classes/dns_activity)

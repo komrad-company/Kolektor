@@ -10,7 +10,7 @@
 type    = "file"
 include = ["${TRAEFIK_ACCESS_LOG:-/var/log/traefik/access.log}"]
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.traefik_parse_and_normalize]
 type   = "remap"
 inputs = ["traefik_input"]
@@ -52,11 +52,11 @@ source = '''
     # Severity selon status HTTP
     ocsf_severity = if status_code >= 500 { 4 } else if status_code >= 400 { 2 } else { 1 }
 
-    # Pre-calcul (VRL interdit les if dans les object literals)
+    # Pre-computed (VRL forbids if inside object literals)
     referrer_value = if referer != null && referer != "-" && referer != "" { referer } else { null }
     actor_name = if client_user != null && client_user != "-" && client_user != "" { client_user } else { null }
 
-    # OCSF 4002 activity_id depuis la methode HTTP (pre-calcule : pas de if dans un object literal)
+    # OCSF 4002 activity_id from the HTTP method (pre-computed: no if inside an object literal)
     method_upper = if method != null { upcase(method) ?? "" } else { "" }
     activity_id = if method_upper == "GET" { 3 } else if method_upper == "POST" { 6 } else if method_upper == "PUT" { 7 } else if method_upper == "DELETE" { 2 } else if method_upper == "HEAD" { 4 } else if method_upper == "OPTIONS" { 5 } else if method_upper == "PATCH" { 9 } else if method_upper == "CONNECT" { 1 } else if method_upper == "TRACE" { 8 } else { 99 }
 
@@ -120,7 +120,7 @@ source = '''
   .raw = raw_msg
   .uid = uuid_v4()
 
-  # Nettoyer les cles brutes Traefik injectees par merge()
+  # Clean up the raw Traefik keys injected by merge()
   del(.ClientAddr)
   del(.ClientHost)
   del(.ClientPort)
@@ -203,7 +203,7 @@ batch.timeout_secs  = 5
 [sinks.traefik_quickwit.request]
 headers.Content-Type = "application/x-ndjson"
 
-# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+# --- SINK : Quickwit raw-logs (parsing failures only) ---
 [sinks.traefik_quickwit_raw_failed]
 type                = "http"
 inputs              = ["traefik_raw_failed"]

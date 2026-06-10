@@ -1,14 +1,14 @@
 # Windows Sysmon
 
 ## Description
-Collecte les evenements Sysmon via Winlogbeat ou NXLog (format JSON).
-Normalise en OCSF selon le type d'event :
-- Event 1 (Process Create) → classe 1007 (Process Activity)
-- Event 7 (Image/Module Loaded) → classe 1005 (Module Activity)
-- Event 3 (Network Connection) → classe 4001 (Network Activity)
-- Event 22 (DNS Query) → classe 4003 (DNS Activity)
+Collects Sysmon events via Winlogbeat or NXLog (JSON format).
+Normalises to OCSF depending on the event type:
+- Event 1 (Process Create) → class 1007 (Process Activity)
+- Event 7 (Image/Module Loaded) → class 1005 (Module Activity)
+- Event 3 (Network Connection) → class 4001 (Network Activity)
+- Event 22 (DNS Query) → class 4003 (DNS Activity)
 
-## Events couverts
+## Covered events
 | Event ID | Description              | OCSF Class | activity_id |
 |----------|--------------------------|------------|-------------|
 | 1        | Process Create           | 1007       | 1 (Launch)  |
@@ -16,20 +16,19 @@ Normalise en OCSF selon le type d'event :
 | 3        | Network Connection       | 4001       | 6 (Traffic) |
 | 22       | DNS Query                | 4003       | 1 (Query)   |
 
-Tout autre Event ID est non supporte et route vers `raw-logs` avec
+Any other Event ID is unsupported and routed to `raw-logs` with
 `parse_error = "sysmon_event_id_unsupported"`.
 
-## Temps de l'evenement
-`.time` utilise le temps de l'evenement (`.winlog.event_data.UtcTime`, ou
-`.@timestamp` a defaut), jamais le timestamp d'ingestion HTTP. Le timestamp
-d'ingestion ne sert que de dernier recours si aucun temps d'evenement n'est
-present.
+## Event time
+`.time` uses the event time (`.winlog.event_data.UtcTime`, or
+`.@timestamp` as a fallback), never the HTTP ingestion timestamp. The ingestion
+timestamp is only a last resort when no event time is present.
 
-## Format attendu
-JSON Winlogbeat (`.winlog.event_id`, `.winlog.event_data.*`) ou NXLog
-(`.event_id`, `.event_data.*` au niveau racine).
+## Expected format
+Winlogbeat JSON (`.winlog.event_id`, `.winlog.event_data.*`) or NXLog
+(`.event_id`, `.event_data.*` at root level).
 
-## Configuration cote source
+## Source-side configuration
 
 ### Winlogbeat (winlogbeat.yml)
 ```yaml
@@ -42,14 +41,14 @@ output.http:
 ```
 
 ### Sysmon config (sysmonconfig.xml)
-Utiliser [SwiftOnSecurity sysmon config](https://github.com/SwiftOnSecurity/sysmon-config)
-ou [olafhartong sysmon modular](https://github.com/olafhartong/sysmon-modular).
+Use [SwiftOnSecurity sysmon config](https://github.com/SwiftOnSecurity/sysmon-config)
+or [olafhartong sysmon modular](https://github.com/olafhartong/sysmon-modular).
 
 ## Variables
 | Variable    | Default | Description        |
 |------------|---------|---------------------|
-| LISTEN_PORT | 8515   | Port HTTP d'ecoute |
+| LISTEN_PORT | 8515   | HTTP listen port   |
 
-## Liens
+## Links
 - [Sysmon](https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon)
 - [Winlogbeat](https://www.elastic.co/beats/winlogbeat)

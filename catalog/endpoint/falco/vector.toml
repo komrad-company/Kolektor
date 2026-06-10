@@ -11,7 +11,7 @@ type     = "http_server"
 address  = "0.0.0.0:${LISTEN_PORT:-8519}"
 encoding = "json"
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.falco_parse_and_normalize]
 type   = "remap"
 inputs = ["falco_input"]
@@ -24,7 +24,7 @@ source = '''
 
   # Falco JSON structure :
   # output, priority, rule, time, output_fields{...}, source, tags[], hostname
-  # to_string() sans `!` : retourne null sur champ absent au lieu de panic.
+  # to_string() without `!` : returns null on a missing field instead of panicking.
   rule_name = to_string(.rule) ?? ""
   valid = rule_name != ""
 
@@ -161,7 +161,7 @@ batch.timeout_secs  = 5
 [sinks.falco_quickwit.request]
 headers.Content-Type = "application/x-ndjson"
 
-# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+# --- SINK : Quickwit raw-logs (parsing failures only) ---
 [sinks.falco_quickwit_raw_failed]
 type                = "http"
 inputs              = ["falco_raw_failed"]

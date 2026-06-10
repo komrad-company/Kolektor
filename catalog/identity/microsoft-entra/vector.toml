@@ -1,8 +1,8 @@
 # ==============================================================================
 # Microsoft Entra ID — Graph API audit logs
 # OCSF Classes : 3002 (Authentication — sign-in) · 6003 (API Activity — directory audit)
-# Input        : HTTP push — POST NDJSON sur ${LISTEN_PORT:-8518}
-#                Le fetcher poste chaque event JSON sur une ligne distincte.
+# Input        : HTTP push — POST NDJSON on ${LISTEN_PORT:-8518}
+#                The fetcher posts each JSON event on a separate line.
 # ==============================================================================
 
 [sources.microsoft_entra_input]

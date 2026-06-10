@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Lance vector test sur chaque source du catalog
+# Runs vector test on each catalog source
 set -euo pipefail
 
-# Dummy env vars pour que Vector ne plante pas sur les ${VAR} dans les configs
+# Dummy env vars so Vector does not crash on the ${VAR} placeholders in the configs
 export TENANT_ID="ci-test"
 export DATASOURCE_ID="ci-test"
 export QUICKWIT_ENDPOINT="http://localhost:7280"
@@ -27,7 +27,7 @@ for source_dir in catalog/*/*/; do
   CONFIG="${source_dir}vector.toml"
   [ -f "$CONFIG" ] || continue
 
-  # Chercher les fichiers de test
+  # Find the test files
   TEST_FILES=$(find "${source_dir}tests/" -name '*.toml' 2>/dev/null | sort)
   [ -z "$TEST_FILES" ] && continue
 
@@ -36,7 +36,7 @@ for source_dir in catalog/*/*/; do
 
   echo "--- Testing: $SOURCE_NAME"
 
-  # Merger config + tests dans un fichier temporaire
+  # Merge config + tests into a temporary file
   MERGED=$(mktemp /tmp/vector-test-XXXXXX.toml)
   cat "$CONFIG" > "$MERGED"
   echo "" >> "$MERGED"
@@ -60,7 +60,7 @@ for source_dir in catalog/*/*/; do
   rm -f "$MERGED"
 done
 
-# Generer le JUnit XML
+# Generate the JUnit XML
 cat > "$RESULTS_DIR/test-junit.xml" <<XMLEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>

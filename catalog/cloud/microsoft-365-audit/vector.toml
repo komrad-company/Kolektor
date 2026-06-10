@@ -1,8 +1,8 @@
 # ==============================================================================
 # Microsoft 365 Unified Audit — Management Activity API
 # OCSF Class : 6003 (API Activity)
-# Input      : HTTP push — POST NDJSON sur ${LISTEN_PORT:-8517}
-#              Le fetcher poste chaque event JSON sur une ligne distincte.
+# Input      : HTTP push — POST NDJSON on ${LISTEN_PORT:-8517}
+#              The fetcher posts each JSON event on a separate line.
 # ==============================================================================
 
 [sources.microsoft365_audit_input]

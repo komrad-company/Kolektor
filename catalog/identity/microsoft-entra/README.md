@@ -2,45 +2,45 @@
 
 ## Description
 
-Normalise les logs Microsoft Graph Entra ID :
+Normalises Microsoft Graph Entra ID logs:
 
-- `/auditLogs/signIns` vers OCSF 3002 Authentication ;
-- `/auditLogs/directoryAudits` vers OCSF 6003 API Activity.
+- `/auditLogs/signIns` to OCSF 3002 Authentication;
+- `/auditLogs/directoryAudits` to OCSF 6003 API Activity.
 
-Le parser expose un endpoint HTTP sur `${LISTEN_PORT:-8518}`. Le fetcher externe
-POST du NDJSON (un objet JSON par ligne) sur cet endpoint. Les deux types d'events
-peuvent transiter sur le meme port : la classe OCSF est determinee au runtime selon
-la presence de `createdDateTime` (sign-in) ou `activityDateTime` (directory audit).
+The parser exposes an HTTP endpoint on `${LISTEN_PORT:-8518}`. The external fetcher
+POSTs NDJSON (one JSON object per line) to this endpoint. Both event types can
+transit on the same port: the OCSF class is determined at runtime from the
+presence of `createdDateTime` (sign-in) or `activityDateTime` (directory audit).
 
-## Format d'entree
+## Input format
 
-JSON object par ligne (NDJSON), schema Microsoft Graph API. Champs discriminants :
+One JSON object per line (NDJSON), Microsoft Graph API schema. Discriminating fields:
 
-- Sign-in : `createdDateTime` obligatoire.
-- Directory audit : `activityDateTime` obligatoire.
+- Sign-in: `createdDateTime` required.
+- Directory audit: `activityDateTime` required.
 
-Tout event sans l'un ou l'autre est rejete vers `raw-logs` avec
+Any event missing either is rejected to `raw-logs` with
 `parse_error = "microsoft_entra_event_shape_invalid"`.
 
-## Fetcher attendu
+## Expected fetcher
 
-Le fetcher appelle Microsoft Graph avec les permissions :
+The fetcher calls Microsoft Graph with the permissions:
 
 - `AuditLog.Read.All` (application permission)
-- Licence Entra ID P1/P2 necessaire pour les sign-in logs selon le tenant.
+- An Entra ID P1/P2 license is required for sign-in logs depending on the tenant.
 
-Le fetcher POSTe chaque event JSON sur `http://<kolektor-host>:${LISTEN_PORT:-8518}`.
+The fetcher POSTs each JSON event to `http://<kolektor-host>:${LISTEN_PORT:-8518}`.
 
 ## Variables
 
 | Variable            | Default | Description                 |
 |---------------------|---------|-----------------------------|
-| `LISTEN_PORT`       | `8518`  | Port d'ecoute HTTP          |
-| `TENANT_ID`         | —       | Injecte runtime             |
-| `DATASOURCE_ID`     | —       | Injecte runtime             |
-| `QUICKWIT_ENDPOINT` | —       | Endpoint Quickwit           |
+| `LISTEN_PORT`       | `8518`  | HTTP listen port            |
+| `TENANT_ID`         | —       | Injected at runtime         |
+| `DATASOURCE_ID`     | —       | Injected at runtime         |
+| `QUICKWIT_ENDPOINT` | —       | Quickwit endpoint           |
 
-## Liens
+## Links
 
 - [Microsoft Entra activity logs with Microsoft Graph](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-analyze-activity-logs-with-microsoft-graph)
 - [Graph signIns API](https://learn.microsoft.com/en-us/graph/api/signin-list)

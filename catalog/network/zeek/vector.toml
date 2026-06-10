@@ -10,7 +10,7 @@
 type    = "file"
 include = ["${ZEEK_LOG_DIR:-/var/log/zeek}/*.log"]
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.zeek_parse_and_normalize]
 type   = "remap"
 inputs = ["zeek_input"]
@@ -229,7 +229,7 @@ batch.timeout_secs  = 5
 [sinks.zeek_quickwit_dns.request]
 headers.Content-Type = "application/x-ndjson"
 
-# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+# --- SINK : Quickwit raw-logs (parsing failures only) ---
 [sinks.zeek_quickwit_raw_failed]
 type                = "http"
 inputs              = ["zeek_raw_failed"]

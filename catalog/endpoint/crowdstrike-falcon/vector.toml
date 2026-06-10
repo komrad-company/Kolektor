@@ -11,7 +11,7 @@ type    = "syslog"
 address = "0.0.0.0:${LISTEN_PORT:-1514}"
 mode    = "tcp"
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.crowdstrike_parse_and_normalize]
 type   = "remap"
 inputs = ["crowdstrike_input"]
@@ -22,7 +22,7 @@ source = '''
 
   raw_msg = to_string(.message) ?? ""
 
-  # CrowdStrike envoie du JSON dans le champ message syslog
+  # CrowdStrike sends JSON in the syslog message field
   event = parse_json(raw_msg) ?? {}
   valid = exists(event.metadata)
 
@@ -204,7 +204,7 @@ source = '''
   }
 '''
 
-# --- ROUTE : dispatch par class_uid ---
+# --- ROUTE : dispatch by class_uid ---
 # 1007 ProcessRollup2 + 2001 DetectionSummary → ocsf-endpoint
 # 4001 NetworkDetection/NetworkContainment → ocsf-network
 [transforms.crowdstrike_route_by_class]
@@ -239,7 +239,7 @@ batch.timeout_secs  = 5
 [sinks.crowdstrike_quickwit_network.request]
 headers.Content-Type = "application/x-ndjson"
 
-# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+# --- SINK : Quickwit raw-logs (parsing failures only) ---
 [sinks.crowdstrike_quickwit_raw_failed]
 type                = "http"
 inputs              = ["crowdstrike_raw_failed"]

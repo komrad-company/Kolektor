@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Genere un rapport markdown a partir des resultats JUnit CI."""
+"""Generates a markdown report from the CI JUnit results."""
 
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -8,7 +8,7 @@ RESULTS_DIR = Path("ci/results")
 
 
 def parse_junit(path: Path) -> list[dict]:
-    """Parse un fichier JUnit XML et retourne la liste des test cases."""
+    """Parses a JUnit XML file and returns the list of test cases."""
     if not path.exists():
         return []
     tree = ET.parse(path)
@@ -30,7 +30,7 @@ def main():
     validate_results = parse_junit(RESULTS_DIR / "validate-junit.xml")
     test_results = parse_junit(RESULTS_DIR / "test-junit.xml")
 
-    lines = ["# Kolektor — Rapport CI", ""]
+    lines = ["# Kolektor — CI Report", ""]
 
     # Validation
     v_pass = sum(1 for r in validate_results if r["passed"])
@@ -56,10 +56,10 @@ def main():
         lines.append(f"| {r['name']} | {status} |")
     lines.append("")
 
-    # Erreurs
+    # Errors
     failures = [r for r in validate_results + test_results if not r["passed"]]
     if failures:
-        lines.append("## Erreurs")
+        lines.append("## Errors")
         lines.append("")
         for r in failures:
             lines.append(f"### {r['name']}")
@@ -68,7 +68,7 @@ def main():
 
     report_path = RESULTS_DIR / "report.md"
     report_path.write_text("\n".join(lines))
-    print(f"Rapport genere: {report_path}")
+    print(f"Report generated: {report_path}")
 
 
 if __name__ == "__main__":

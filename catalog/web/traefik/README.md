@@ -1,11 +1,11 @@
 # Traefik — access log JSON
 
 ## Description
-Collecte les access logs Traefik (format JSON structure).
-Normalise en OCSF classe 4002 (HTTP Activity).
+Collects Traefik access logs (structured JSON format).
+Normalized to OCSF class 4002 (HTTP Activity).
 
-## Format attendu
-Une ligne JSON par requete, ecrite par Traefik avec `format=json` :
+## Expected format
+One JSON line per request, written by Traefik with `format=json`:
 ```json
 {
   "ClientHost": "10.0.0.5",
@@ -25,7 +25,7 @@ Une ligne JSON par requete, ecrite par Traefik avec `format=json` :
 }
 ```
 
-## Configuration cote source
+## Source-side configuration
 
 ### Traefik static config (YAML)
 ```yaml
@@ -53,13 +53,13 @@ accessLog:
 ## Variables
 | Variable              | Default                          | Description                    |
 |-----------------------|----------------------------------|--------------------------------|
-| `TRAEFIK_ACCESS_LOG`  | `/var/log/traefik/access.log`    | Chemin du fichier access log   |
-| `TENANT_ID`           | -                                | Injecte runtime                |
-| `DATASOURCE_ID`       | -                                | Injecte runtime                |
-| `QUICKWIT_ENDPOINT`   | -                                | Injecte runtime                |
+| `TRAEFIK_ACCESS_LOG`  | `/var/log/traefik/access.log`    | Access log file path           |
+| `TENANT_ID`           | -                                | Injected at runtime            |
+| `DATASOURCE_ID`       | -                                | Injected at runtime            |
+| `QUICKWIT_ENDPOINT`   | -                                | Injected at runtime            |
 
-## Mapping OCSF
-| Champ Traefik           | Champ OCSF                     |
+## OCSF mapping
+| Traefik field           | OCSF field                     |
 |-------------------------|--------------------------------|
 | `RequestMethod`         | `http_request.http_method`     |
 | `RequestPath`           | `http_request.url.path`        |
@@ -78,6 +78,6 @@ accessLog:
 | `ServiceName`           | `unmapped.service_name`        |
 | `Duration`              | `unmapped.duration_ns`         |
 
-## Liens
+## Links
 - [Traefik access log docs](https://doc.traefik.io/traefik/observability/access-logs/)
 - [OCSF 4002 HTTP Activity](https://schema.ocsf.io/classes/http_activity)

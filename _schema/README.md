@@ -1,87 +1,87 @@
-# Guide de contribution — Nouveau parser
+# Contribution guide — New parser
 
-## Ajouter une nouvelle source
+## Add a new source
 
-1. Copier le template :
+1. Copy the template:
    ```bash
    cp -r _schema/template.toml catalog/<category>/<source>/vector.toml
    ```
 
-2. Editer `vector.toml` :
-   - Adapter la source (syslog, file, http...)
-   - Ecrire le VRL de parsing dans le transform `parse_and_normalize`
-   - Mapper vers les champs OCSF obligatoires
-   - Garder le log source dans `.raw` pour les evenements OCSF valides
-   - Router les echecs de parsing vers `raw-logs`, pas vers un index OCSF
+2. Edit `vector.toml`:
+   - Adapt the source (syslog, file, http...)
+   - Write the parsing VRL in the `parse_and_normalize` transform
+   - Map to the mandatory OCSF fields
+   - Keep the source log in `.raw` for valid OCSF events
+   - Route parsing failures to `raw-logs`, not to an OCSF index
 
-3. Creer les tests dans `tests/` (minimum 3) :
-   - `nominal.toml` — event standard, tous les champs presents
-   - `optional_missing.toml` — champs optionnels manquants
-   - `malformed.toml` — input invalide, doit sortir en `raw-logs` avec `parse_status = "failed"` sans sortir en OCSF
+3. Create the tests in `tests/` (minimum 3):
+   - `nominal.toml` — standard event, all fields present
+   - `optional_missing.toml` — optional fields missing
+   - `malformed.toml` — invalid input, must exit to `raw-logs` with `parse_status = "failed"` without exiting to OCSF
 
-4. Creer un `README.md` documentant :
-   - Description de la source
-   - Format de log attendu
-   - Configuration cote source (comment envoyer les logs)
-   - Variables d'environnement specifiques
-   - Liens vers la doc officielle
+4. Create a `README.md` documenting:
+   - Description of the source
+   - Expected log format
+   - Source-side configuration (how to send the logs)
+   - Specific environment variables
+   - Links to the official documentation
 
-5. Valider :
+5. Validate:
    ```bash
-   # Vector 0.54 --no-environment ne desactive PAS l'expansion ${VAR} :
-   # passer par ci/validate.sh (injecte des dummy vars) ou exporter soi-meme.
+   # Vector 0.54 --no-environment does NOT disable ${VAR} expansion:
+   # use ci/validate.sh (injects dummy vars) or export them yourself.
    bash ci/validate.sh
    bash ci/test.sh
    ```
 
-## Champs OCSF obligatoires
+## Mandatory OCSF fields
 
-Chaque event normalise doit contenir :
+Each normalized event must contain:
 
-| Champ           | Type   | Description                    |
+| Field           | Type   | Description                    |
 |-----------------|--------|--------------------------------|
-| `class_uid`     | int    | Classe OCSF (ex: 4001)        |
-| `category_uid`  | int    | Categorie OCSF (ex: 4)        |
+| `class_uid`     | int    | OCSF class (e.g. 4001)        |
+| `category_uid`  | int    | OCSF category (e.g. 4)        |
 | `severity_id`   | int    | 0=Unknown, 1=Info, 2=Low...   |
 | `time`          | int    | Epoch milliseconds             |
 | `metadata`      | object | `product.name`, `vendor_name`  |
-| `tenant_id`     | string | Injecte via `$TENANT_ID`       |
-| `datasource_id` | string | Injecte via `$DATASOURCE_ID`   |
-| `raw`           | string | Message original conserve      |
-| `uid`           | string | UUID partage avec raw-logs si besoin d'investigation |
+| `tenant_id`     | string | Injected via `$TENANT_ID`      |
+| `datasource_id` | string | Injected via `$DATASOURCE_ID`  |
+| `raw`           | string | Original message preserved     |
+| `uid`           | string | UUID shared with raw-logs when investigation is needed |
 
 ## Conventions
 
-- Fichiers en TOML
-- VRL inline dans le transform (pas de fichier `.vrl` separe)
-- Variables runtime en `${ENV_VAR}` avec defaults si applicable
-- Logs de test : bruts reels, pas inventes
-- Aucun evenement non parse ne doit etre envoye dans un index OCSF
-- Les champs OCSF dynamiques doivent etre routes vers l'index Quickwit qui correspond a leur `class_uid`
+- Files in TOML
+- VRL inline in the transform (no separate `.vrl` file)
+- Runtime variables as `${ENV_VAR}` with defaults where applicable
+- Test logs: real raw samples, not invented
+- No unparsed event must be sent to an OCSF index
+- Dynamic OCSF fields must be routed to the Quickwit index matching their `class_uid`
 
-## Convention collecteur / parser
+## Collector / parser convention
 
-Kolektor separe la recuperation des logs et leur normalisation :
+Kolektor separates log retrieval from normalization:
 
-- un **collecteur** recupere les logs depuis la source : syslog, fichier, API pull
-  avec curseur, object storage + queue, Event Hub/EventBridge, ou Logpush HTTP ;
-- un **parser** Vector transforme un format brut canonique en OCSF et route vers
-  les index Quickwit.
+- a **collector** retrieves the logs from the source: syslog, file, cursor-based
+  pull API, object storage + queue, Event Hub/EventBridge, or Logpush HTTP;
+- a Vector **parser** transforms a canonical raw format into OCSF and routes to
+  the Quickwit indexes.
 
-Pour les sources cloud/SaaS, ne pas enfouir la pagination, OAuth, retry/backoff
-ou gestion de curseur dans le VRL. Preferer un collecteur dedie qui depose du
-JSON line-delimited ou pousse des objets JSON vers Vector. Le parser doit rester
-testable avec des fixtures brutes et reutilisable quel que soit le transport.
+For cloud/SaaS sources, do not bury pagination, OAuth, retry/backoff
+or cursor management in the VRL. Prefer a dedicated collector that drops
+line-delimited JSON or pushes JSON objects to Vector. The parser must stay
+testable with raw fixtures and reusable regardless of the transport.
 
-## Convention raw / OCSF / raw-logs
+## raw / OCSF / raw-logs convention
 
-Chaque evenement OCSF valide garde une copie du log source dans `.raw`.
-Pour les sources texte (`file`, payload syslog), `.raw` doit etre le message original
-ou la ligne reconstruite la plus proche possible. Pour les sources JSON deja decodees
-par Vector (`http_server encoding = "json"`), capturer `raw_msg = encode_json(.)`
-avant d'ajouter `tenant_id`, `datasource_id` ou les champs OCSF.
+Each valid OCSF event keeps a copy of the source log in `.raw`.
+For text sources (`file`, syslog payload), `.raw` must be the original message
+or the closest possible reconstructed line. For JSON sources already decoded
+by Vector (`http_server encoding = "json"`), capture `raw_msg = encode_json(.)`
+before adding `tenant_id`, `datasource_id` or the OCSF fields.
 
-Chaque evenement valide porte aussi un `uid` :
+Each valid event also carries a `uid`:
 
 ```vrl
 _ts  = to_string(.timestamp) ?? ""
@@ -90,11 +90,11 @@ _pid = if .procid != null { "[" + to_string!(.procid) + "]" } else { "" }
 .uid = uuid_v4()
 ```
 
-Les evenements parses ne sont pas recopies systematiquement dans `raw-logs` :
-leur brut est deja dans `.raw`. `raw-logs` sert a isoler les echecs de parsing
-et les formats non supportes.
+Parsed events are not systematically copied into `raw-logs`:
+their raw form is already in `.raw`. `raw-logs` serves to isolate parsing failures
+and unsupported formats.
 
-Pattern attendu pour les echecs :
+Expected pattern for failures:
 
 ```toml
 [transforms.filter_failed]
@@ -121,20 +121,20 @@ source = '''
 '''
 ```
 
-Le sink `raw_failed` envoie vers `${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest`.
+The `raw_failed` sink sends to `${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest`.
 
-Le `uid` permet a Kontrol de correler un event OCSF normalise avec sa ligne brute
-originale quand elle existe dans un autre flux, et donne un identifiant stable
-pour les evenements de quarantaine.
+The `uid` lets Kontrol correlate a normalized OCSF event with its original raw
+line when it exists in another stream, and provides a stable identifier
+for quarantine events.
 
-## Routage dynamique quand `class_uid` varie
+## Dynamic routing when `class_uid` varies
 
-Si une source produit plusieurs classes OCSF (ex: auditd = 1003 + 3002,
-windows-evtx = 3001/3002/1003), il faut un transform `route` + un sink par
-index Quickwit cible. Un sink unique vers `ocsf-endpoint` avec des events 3002
-dedans = donnees au mauvais endroit. Voir [catalog/linux/auditd/vector.toml](../catalog/linux/auditd/vector.toml).
+If a source produces multiple OCSF classes (e.g. auditd = 1003 + 3002,
+windows-evtx = 3001/3002/1003), a `route` transform + one sink per
+target Quickwit index is required. A single sink to `ocsf-endpoint` with 3002
+events inside = data in the wrong place. See [catalog/linux/auditd/vector.toml](../catalog/linux/auditd/vector.toml).
 
-Le `manifest.yaml` doit declarer les sorties multiples avec `ocsf_outputs` :
+The `manifest.yaml` must declare the multiple outputs with `ocsf_outputs`:
 
 ```yaml
 display_name: Windows Sysmon
@@ -154,17 +154,17 @@ ocsf_outputs:
     route: dns
 ```
 
-Pour une source mono-classe, les champs historiques `ocsf_class_uid` et
-`ocsf_category_uid` restent acceptes ; le seed genere automatiquement une sortie.
+For a single-class source, the legacy fields `ocsf_class_uid` and
+`ocsf_category_uid` remain accepted; the seed automatically generates one output.
 
-## Tests attendus
+## Expected tests
 
-Les tests doivent verifier :
+The tests must verify:
 
-- un cas nominal jusqu'au transform normalise ;
-- un cas optionnel avec champs absents ;
-- un cas malformed avec `.class_uid == 0` au transform de parsing ;
-- une sortie du transform `raw_failed` avec `parse_status = "failed"`,
-  `source_type`, `parse_error`, `raw`, `uid`, `tenant_id` et `datasource_id` ;
-- pour les parsers multi-classes, au moins un cas par route (`endpoint`,
+- a nominal case through to the normalize transform;
+- an optional case with missing fields;
+- a malformed case with `.class_uid == 0` at the parsing transform;
+- an output from the `raw_failed` transform with `parse_status = "failed"`,
+  `source_type`, `parse_error`, `raw`, `uid`, `tenant_id` and `datasource_id`;
+- for multi-class parsers, at least one case per route (`endpoint`,
   `identity`, `network`, `dns`, etc.).

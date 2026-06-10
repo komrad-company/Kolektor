@@ -10,7 +10,7 @@
 type    = "file"
 include = ["${K8S_AUDIT_LOG:-/var/log/kubernetes/audit.log}"]
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.k8s_audit_parse_and_normalize]
 type   = "remap"
 inputs = ["k8s_audit_input"]
@@ -26,7 +26,7 @@ source = '''
   if valid {
     ev = object!(event)
 
-    # Helpers : null si champ absent ou string vide (OCSF preferre null a "")
+    # Helpers : null if the field is absent or an empty string (OCSF prefers null over "")
     verb_raw = get(ev, ["verb"]) ?? null
     verb = if verb_raw != null { to_string(verb_raw) ?? "" } else { "" }
 
@@ -52,11 +52,11 @@ source = '''
     uu_raw = get(user_obj, ["uid"]) ?? null
     user_uid = if uu_raw != null { s = to_string(uu_raw) ?? ""; if s != "" { s } else { null } } else { null }
 
-    # Source IPs (array) : on prend la 1ere
+    # Source IPs (array) : take the first one
     source_ips = array(get(ev, ["sourceIPs"]) ?? []) ?? []
     src_ip = if length(source_ips) > 0 { s = to_string(source_ips[0]) ?? ""; if s != "" { s } else { null } } else { null }
 
-    # objectRef : cible de l'operation
+    # objectRef : target of the operation
     obj_ref = object(get(ev, ["objectRef"]) ?? {}) ?? {}
     tr_raw = get(obj_ref, ["resource"]) ?? null
     target_resource = if tr_raw != null { s = to_string(tr_raw) ?? ""; if s != "" { s } else { null } } else { null }
@@ -88,7 +88,7 @@ source = '''
     # activity_id OCSF : Create=1, Read=2, Update=3, Delete=4, Other=99
     activity_id = if verb == "create" || verb == "post" { 1 } else if verb == "get" || verb == "list" || verb == "watch" { 2 } else if verb == "update" || verb == "patch" || verb == "put" { 3 } else if verb == "delete" || verb == "deletecollection" { 4 } else { 99 }
 
-    # Timestamp : stageTimestamp priorise (fin de requete)
+    # Timestamp : stageTimestamp prioritized (end of request)
     ts_str_raw = to_string(get(ev, ["stageTimestamp"]) ?? "") ?? ""
     if ts_str_raw == "" {
       ts_str_raw = to_string(get(ev, ["requestReceivedTimestamp"]) ?? "") ?? ""
@@ -179,7 +179,7 @@ type      = "filter"
 inputs    = ["k8s_audit_parse_and_normalize"]
 condition = '.class_uid != 6003'
 
-# --- TRANSFORM : extraction des echecs pour raw-logs ---
+# --- TRANSFORM : extract failures for raw-logs ---
 [transforms.k8s_audit_raw_only]
 type   = "remap"
 inputs = ["k8s_audit_filter_failed"]

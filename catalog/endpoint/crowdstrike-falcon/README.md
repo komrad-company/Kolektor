@@ -1,19 +1,19 @@
 # CrowdStrike Falcon — SIEM Connector
 
 ## Description
-Collecte les events CrowdStrike Falcon via le SIEM Connector (JSON syslog).
-Normalise en OCSF selon le type d'event :
-- DetectionSummaryEvent → classe 2001 (Security Finding)
-- ProcessRollup2 → classe 1007 (Process Activity)
-- NetworkDetection → classe 4001 (Network Activity)
+Collects CrowdStrike Falcon events via the SIEM Connector (JSON syslog).
+Normalises to OCSF depending on the event type:
+- DetectionSummaryEvent → class 2001 (Security Finding)
+- ProcessRollup2 → class 1007 (Process Activity)
+- NetworkDetection → class 4001 (Network Activity)
 
-## Format attendu
-JSON encapsule dans du syslog :
+## Expected format
+JSON wrapped in syslog:
 ```json
 {"metadata":{"eventType":"DetectionSummaryEvent","eventCreationTime":1713091425000,...},"SeverityName":"High","ComputerName":"WS01",...}
 ```
 
-## Configuration cote source
+## Source-side configuration
 
 ### SIEM Connector
 ```bash
@@ -27,13 +27,13 @@ output:
 ```
 
 ### Streaming API
-Configurer le Streaming API CrowdStrike pour envoyer en TCP syslog.
+Configure the CrowdStrike Streaming API to send over TCP syslog.
 
 ## Variables
 | Variable    | Default | Description        |
 |------------|---------|---------------------|
-| LISTEN_PORT | 1514   | Port syslog TCP    |
+| LISTEN_PORT | 1514   | TCP syslog port    |
 
-## Liens
+## Links
 - [CrowdStrike SIEM Connector](https://falcon.crowdstrike.com/documentation/9/falcon-siem-connector)
 - [CrowdStrike Event Streams](https://falcon.crowdstrike.com/documentation/89/event-streams)

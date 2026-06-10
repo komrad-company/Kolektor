@@ -12,7 +12,7 @@ type     = "http_server"
 address  = "0.0.0.0:${LISTEN_PORT:-8515}"
 encoding = "json"
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.sysmon_parse_and_normalize]
 type   = "remap"
 inputs = ["sysmon_input"]
@@ -185,7 +185,7 @@ type      = "filter"
 inputs    = ["sysmon_parse_and_normalize"]
 condition = '.class_uid != 0'
 
-# --- ROUTE : dispatch par class_uid ---
+# --- ROUTE : dispatch by class_uid ---
 [transforms.sysmon_route_by_class]
 type   = "route"
 inputs = ["sysmon_filter_valid"]
@@ -255,7 +255,7 @@ batch.timeout_secs  = 5
 [sinks.sysmon_quickwit_dns.request]
 headers.Content-Type = "application/x-ndjson"
 
-# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+# --- SINK : Quickwit raw-logs (parsing failures only) ---
 [sinks.sysmon_quickwit_raw_failed]
 type                = "http"
 inputs              = ["sysmon_raw_failed"]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifie que chaque source du catalog a au minimum 3 fichiers de test
+# Checks that each catalog source has at least 3 test files
 set -euo pipefail
 
 MIN_TESTS=3

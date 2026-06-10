@@ -2,19 +2,19 @@
 
 ## Description
 
-Normalise les activites de l'Admin SDK Reports API de Google Workspace. La classe
-OCSF est determinee au runtime selon `id.applicationName` :
+Normalises Google Workspace Admin SDK Reports API activities. The OCSF class is
+determined at runtime from `id.applicationName`:
 
-- `login` vers OCSF 3002 Authentication (index `ocsf-identity`) ;
-- `admin` / `user_accounts` / `groups` vers OCSF 3001 Account Change (index `ocsf-identity`) ;
-- toute autre application (`drive`, `token`, `calendar`...) vers OCSF 6003 API Activity (index `ocsf-audit`).
+- `login` to OCSF 3002 Authentication (index `ocsf-identity`);
+- `admin` / `user_accounts` / `groups` to OCSF 3001 Account Change (index `ocsf-identity`);
+- any other application (`drive`, `token`, `calendar`...) to OCSF 6003 API Activity (index `ocsf-audit`).
 
-Le parser expose un endpoint HTTP sur `${LISTEN_PORT:-8523}`. Un fetcher externe
-interroge la Reports API et POST chaque objet `activity` JSON sur cet endpoint.
+The parser exposes an HTTP endpoint on `${LISTEN_PORT:-8523}`. An external fetcher
+queries the Reports API and POSTs each JSON `activity` object to this endpoint.
 
-## Format d'entree
+## Input format
 
-Objet JSON `admin#reports#activity` de la Reports API :
+`admin#reports#activity` JSON object from the Reports API:
 
 ```json
 {
@@ -40,43 +40,43 @@ Objet JSON `admin#reports#activity` de la Reports API :
 }
 ```
 
-Le tableau `events[]` peut contenir plusieurs entrees. Le parser mappe la premiere
-pour `name`/`type` ; les suivantes sont conservees dans `unmapped.extra_events`.
+The `events[]` array may contain multiple entries. The parser maps the first one
+for `name`/`type`; the rest are kept in `unmapped.extra_events`.
 
-### Mapping OCSF
+### OCSF mapping
 
-- `time` derive de `id.time` (RFC 3339) en epoch millisecondes.
-- `actor.user.email_addr` / `actor.user.name` depuis `actor.email`, `actor.user.uid` depuis `actor.profileId`.
-- `src_endpoint.ip` depuis `ipAddress`.
-- Authentication (`login`) : `activity_id` 1 (Logon) pour `login_success`/`login`, 2 (Logoff) pour `logout`, 99 sinon. `status_id` 2 (Failure) pour `login_failure`, 1 (Success) sinon.
-- Account Change (`admin`/`user_accounts`/`groups`) : `activity_id` 99 (verbes trop varies pour un mapping fiable).
-- API Activity (autres) : `activity_id` deduit du verbe (`create`/`add` 1, `view`/`download`/`list` 2, `edit`/`update`/`rename` 3, `delete`/`remove` 4, sinon 99).
-- `severity_id` 1 (Informational) par defaut, 3 (Medium) sur `login_failure`.
+- `time` derived from `id.time` (RFC 3339) as epoch milliseconds.
+- `actor.user.email_addr` / `actor.user.name` from `actor.email`, `actor.user.uid` from `actor.profileId`.
+- `src_endpoint.ip` from `ipAddress`.
+- Authentication (`login`): `activity_id` 1 (Logon) for `login_success`/`login`, 2 (Logoff) for `logout`, 99 otherwise. `status_id` 2 (Failure) for `login_failure`, 1 (Success) otherwise.
+- Account Change (`admin`/`user_accounts`/`groups`): `activity_id` 99 (verbs too varied for a reliable mapping).
+- API Activity (others): `activity_id` derived from the verb (`create`/`add` 1, `view`/`download`/`list` 2, `edit`/`update`/`rename` 3, `delete`/`remove` 4, otherwise 99).
+- `severity_id` 1 (Informational) by default, 3 (Medium) on `login_failure`.
 
-Toute activite sans `id.applicationName` ou sans `events[]` est rejetee vers
-`raw-logs` avec `parse_error = "google_workspace_activity_shape_invalid"`.
+Any activity missing `id.applicationName` or `events[]` is rejected to
+`raw-logs` with `parse_error = "google_workspace_activity_shape_invalid"`.
 
-## Fetcher attendu
+## Expected fetcher
 
-Le fetcher appelle l'Admin SDK Reports API avec :
+The fetcher calls the Admin SDK Reports API with:
 
-- le scope `https://www.googleapis.com/auth/admin.reports.audit.readonly` ;
-- un compte de service avec delegation domain-wide, ou un admin OAuth.
+- the `https://www.googleapis.com/auth/admin.reports.audit.readonly` scope;
+- a service account with domain-wide delegation, or an OAuth admin.
 
-Il pagine via `nextPageToken`, garde un curseur sur `startTime`, et POST chaque
-event de `items[]` sur `http://<kolektor-host>:${LISTEN_PORT:-8523}`. La pagination,
-l'OAuth et le curseur restent dans le fetcher — jamais dans le VRL.
+It paginates via `nextPageToken`, keeps a cursor on `startTime`, and POSTs each
+event from `items[]` to `http://<kolektor-host>:${LISTEN_PORT:-8523}`. Pagination,
+OAuth and the cursor stay in the fetcher — never in the VRL.
 
 ## Variables
 
 | Variable            | Default | Description                 |
 |---------------------|---------|-----------------------------|
-| `LISTEN_PORT`       | `8523`  | Port d'ecoute HTTP          |
-| `TENANT_ID`         | —       | Injecte runtime             |
-| `DATASOURCE_ID`     | —       | Injecte runtime             |
-| `QUICKWIT_ENDPOINT` | —       | Endpoint Quickwit           |
+| `LISTEN_PORT`       | `8523`  | HTTP listen port            |
+| `TENANT_ID`         | —       | Injected at runtime         |
+| `DATASOURCE_ID`     | —       | Injected at runtime         |
+| `QUICKWIT_ENDPOINT` | —       | Quickwit endpoint           |
 
-## Liens
+## Links
 
 - [Admin SDK Reports API — Activities](https://developers.google.com/admin-sdk/reports/reference/rest/v1/activities)
 - [Activities.list](https://developers.google.com/admin-sdk/reports/reference/rest/v1/activities/list)

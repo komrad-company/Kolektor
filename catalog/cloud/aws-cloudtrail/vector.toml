@@ -11,7 +11,7 @@ type     = "http_server"
 address  = "0.0.0.0:${LISTEN_PORT:-8516}"
 encoding = "json"
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.cloudtrail_parse_and_normalize]
 type   = "remap"
 inputs = ["cloudtrail_input"]
@@ -26,7 +26,7 @@ source = '''
   # eventVersion, eventTime, eventSource, eventName, awsRegion,
   # sourceIPAddress, userAgent, userIdentity.{type, arn, accountId, userName},
   # requestParameters, responseElements, errorCode, errorMessage
-  # to_string() sans `!` : retourne null sur champ absent au lieu de panic (events CloudTrail incomplets)
+  # to_string() without `!` : returns null on a missing field instead of panicking (incomplete CloudTrail events)
   event_name = to_string(.eventName) ?? ""
   event_source = to_string(.eventSource) ?? ""
   valid = event_name != ""
@@ -37,7 +37,7 @@ source = '''
     parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
     ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp!(now(), unit: "milliseconds") }
 
-    # Error = failure (exists() obligatoire car to_string(null) == "" en VRL)
+    # Error = failure (exists() is mandatory because to_string(null) == "" in VRL)
     error_code = if exists(.errorCode) { to_string(.errorCode) ?? null } else { null }
     error_msg  = if exists(.errorMessage) { to_string(.errorMessage) ?? null } else { null }
     is_error = error_code != null
@@ -46,7 +46,7 @@ source = '''
     status = if is_error { "Failure" } else { "Success" }
     status_id = if is_error { 2 } else { 1 }
 
-    # User identity (peut manquer pour AWSService / AssumedRole partiel)
+    # User identity (may be absent for AWSService / partial AssumedRole)
     user_identity = object(.userIdentity) ?? {}
     user_type = to_string(user_identity.type) ?? null
     user_arn = to_string(user_identity.arn) ?? null
@@ -203,7 +203,7 @@ batch.timeout_secs  = 5
 [sinks.cloudtrail_quickwit.request]
 headers.Content-Type = "application/x-ndjson"
 
-# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+# --- SINK : Quickwit raw-logs (parsing failures only) ---
 [sinks.cloudtrail_quickwit_raw_failed]
 type                = "http"
 inputs              = ["cloudtrail_raw_failed"]

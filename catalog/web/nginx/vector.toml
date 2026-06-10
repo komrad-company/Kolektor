@@ -10,7 +10,7 @@
 type    = "file"
 include = ["${NGINX_ACCESS_LOG:-/var/log/nginx/access.log}"]
 
-# --- TRANSFORM : parse + normalisation OCSF ---
+# --- TRANSFORM : parse + OCSF normalization ---
 [transforms.nginx_parse_and_normalize]
 type   = "remap"
 inputs = ["nginx_input"]
@@ -154,7 +154,7 @@ batch.timeout_secs  = 5
 [sinks.nginx_quickwit.request]
 headers.Content-Type = "application/x-ndjson"
 
-# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+# --- SINK : Quickwit raw-logs (parsing failures only) ---
 [sinks.nginx_quickwit_raw_failed]
 type                = "http"
 inputs              = ["nginx_raw_failed"]

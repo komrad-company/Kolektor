@@ -1,20 +1,20 @@
 # Linux Syslog — RFC 3164 / RFC 5424
 
 ## Description
-Collecte les logs syslog Linux (rsyslog, syslog-ng, systemd-journald) via TCP/UDP.
-Une ligne syslog generique ne porte aucune activite OCSF intrinseque : elle est
-emise en OCSF Base Event (class_uid 0 / category_uid 0, decret D2) avec
-`parse_status = "parsed"` et routee vers l'index `raw-logs`. Parser de repli :
-les parsers specifiques (auth-log, parsers de service) sont preferes quand la
-source est connue.
+Collects Linux syslog logs (rsyslog, syslog-ng, systemd-journald) over TCP/UDP.
+A generic syslog line carries no intrinsic OCSF activity: it is emitted as an
+OCSF Base Event (class_uid 0 / category_uid 0, decree D2) with
+`parse_status = "parsed"` and routed to the `raw-logs` index. Fallback parser:
+the specific parsers (auth-log, service parsers) are preferred when the source
+is known.
 
-## Format attendu
-- RFC 3164 : `<PRI>Mmm dd hh:mm:ss hostname app[pid]: message`
-- RFC 5424 : `<PRI>VERSION TIMESTAMP HOSTNAME APP-NAME PROCID MSGID STRUCTURED-DATA MSG`
+## Expected format
+- RFC 3164: `<PRI>Mmm dd hh:mm:ss hostname app[pid]: message`
+- RFC 5424: `<PRI>VERSION TIMESTAMP HOSTNAME APP-NAME PROCID MSGID STRUCTURED-DATA MSG`
 
-Vector parse automatiquement les deux formats via la source `syslog`.
+Vector automatically parses both formats via the `syslog` source.
 
-## Configuration cote source
+## Source-side configuration
 
 ### rsyslog
 ```
@@ -30,19 +30,19 @@ log { source(s_sys); destination(d_vector); };
 ## Variables
 | Variable     | Default | Description        |
 |-------------|---------|---------------------|
-| LISTEN_PORT | 514     | Port TCP d'ecoute  |
+| LISTEN_PORT | 514     | TCP listen port    |
 
-## Mapping OCSF (Base Event)
-| Champ syslog                | Champ OCSF                |
+## OCSF mapping (Base Event)
+| syslog field                | OCSF field                |
 |-----------------------------|---------------------------|
-| severity                    | severity_id (remappe 0-7 → 1-5) |
+| severity                    | severity_id (remapped 0-7 → 1-5) |
 | facility                    | metadata.log_provider     |
 | header + appname/procid/message | raw                  |
 
-La ligne syslog complete (header + message) est conservee dans `raw`. Aucun
-`activity_id` n'est emis : un Base Event (class 0) n'en porte pas.
+The complete syslog line (header + message) is preserved in `raw`. No
+`activity_id` is emitted: a Base Event (class 0) carries none.
 
-## Liens
+## Links
 - [Vector syslog source](https://vector.dev/docs/reference/configuration/sources/syslog/)
 - [RFC 3164](https://datatracker.ietf.org/doc/html/rfc3164)
 - [RFC 5424](https://datatracker.ietf.org/doc/html/rfc5424)

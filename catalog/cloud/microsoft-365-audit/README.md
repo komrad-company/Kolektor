@@ -2,22 +2,22 @@
 
 ## Description
 
-Normalise les evenements Microsoft 365 Unified Audit vers OCSF 6003 API Activity.
+Normalises Microsoft 365 Unified Audit events to OCSF 6003 API Activity.
 
-Le parser expose un endpoint HTTP sur `${LISTEN_PORT:-8517}`. Le fetcher external
-POST du NDJSON (un objet JSON par ligne) sur cet endpoint. Kolektor n'impose
-aucune implementation de collecteur : tout process capable de POSTer du NDJSON
-est compatible.
+The parser exposes an HTTP endpoint on `${LISTEN_PORT:-8517}`. The external fetcher
+POSTs NDJSON (one JSON object per line) to this endpoint. Kolektor mandates no
+specific collector implementation: any process capable of POSTing NDJSON is
+compatible.
 
-## Format d'entree
+## Input format
 
-JSON object par ligne (NDJSON), schema Management Activity API Microsoft. Champs
-obligatoires : `Operation`, `Workload`. Tout event sans ces deux champs est rejete
-vers `raw-logs` avec `parse_error = "microsoft365_audit_required_fields_missing"`.
+One JSON object per line (NDJSON), Microsoft Management Activity API schema.
+Required fields: `Operation`, `Workload`. Any event missing these two fields is
+rejected to `raw-logs` with `parse_error = "microsoft365_audit_required_fields_missing"`.
 
-## Fetcher attendu
+## Expected fetcher
 
-Le fetcher appelle l'Office 365 Management Activity API avec les content types :
+The fetcher calls the Office 365 Management Activity API with the content types:
 
 - `Audit.AzureActiveDirectory`
 - `Audit.Exchange`
@@ -25,19 +25,19 @@ Le fetcher appelle l'Office 365 Management Activity API avec les content types :
 - `Audit.General`
 - `DLP.All`
 
-Permission API requise : `ActivityFeed.Read` sur Office 365 Management APIs.
+Required API permission: `ActivityFeed.Read` on Office 365 Management APIs.
 
-Le fetcher POSTe chaque event JSON sur `http://<kolektor-host>:${LISTEN_PORT:-8517}`.
+The fetcher POSTs each JSON event to `http://<kolektor-host>:${LISTEN_PORT:-8517}`.
 
 ## Variables
 
 | Variable            | Default | Description                 |
 |---------------------|---------|-----------------------------|
-| `LISTEN_PORT`       | `8517`  | Port d'ecoute HTTP          |
-| `TENANT_ID`         | —       | Injecte runtime             |
-| `DATASOURCE_ID`     | —       | Injecte runtime             |
-| `QUICKWIT_ENDPOINT` | —       | Endpoint Quickwit           |
+| `LISTEN_PORT`       | `8517`  | HTTP listen port            |
+| `TENANT_ID`         | —       | Injected at runtime         |
+| `DATASOURCE_ID`     | —       | Injected at runtime         |
+| `QUICKWIT_ENDPOINT` | —       | Quickwit endpoint           |
 
-## Liens
+## Links
 
 - [Office 365 Management Activity API reference](https://learn.microsoft.com/en-us/office/office-365-management-api/office-365-management-activity-api-reference)

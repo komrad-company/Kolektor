@@ -1,27 +1,27 @@
 # OPNsense Firewall — filterlog
 
 ## Description
-Collecte les logs filterlog d'OPNsense via syslog.
-Normalise en OCSF classe 4001 (Network Activity).
+Collects OPNsense filterlog logs over syslog.
+Normalized to OCSF class 4001 (Network Activity).
 
-## Format attendu
-CSV via syslog :
+## Expected format
+CSV over syslog:
 ```
 rulenr,subrulenr,anchorname,label,interface,reason,action,direction,ip_version,tos,ecn,ttl,id,offset,flags,proto_id,proto,length,src_ip,dst_ip,src_port,dst_port,...
 ```
 
-## Configuration cote source
+## Source-side configuration
 
 ### OPNsense (System > Settings > Logging)
-- Remote log servers : `<vector-host>:<port>` (TCP)
-- Cocher "Firewall Events" dans les facilities
+- Remote log servers: `<vector-host>:<port>` (TCP)
+- Check "Firewall Events" in the facilities
 
 ## Variables
 | Variable    | Default | Description        |
 |------------|---------|---------------------|
-| LISTEN_PORT | 514    | Port syslog TCP    |
+| LISTEN_PORT | 514    | TCP syslog port    |
 
-## Mapping OCSF
+## OCSF mapping
 | filterlog  | OCSF                          |
 |-----------|-------------------------------|
 | pass      | action=Allow, action_id=1     |
@@ -30,6 +30,6 @@ rulenr,subrulenr,anchorname,label,interface,reason,action,direction,ip_version,t
 | src/dst   | src_endpoint/dst_endpoint     |
 | proto     | connection_info.protocol_name |
 
-## Liens
+## Links
 - [OPNsense filterlog format](https://docs.opnsense.org/development/frontend/diagnostics_log.html)
 - [Vector syslog source](https://vector.dev/docs/reference/configuration/sources/syslog/)

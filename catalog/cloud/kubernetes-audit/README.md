@@ -1,11 +1,11 @@
 # Kubernetes Audit Log
 
 ## Description
-Collecte les audit events du `kube-apiserver` (JSON, API `audit.k8s.io/v1`).
-Normalise en OCSF classe 6003 (API Activity).
+Collects `kube-apiserver` audit events (JSON, `audit.k8s.io/v1` API).
+Normalises to OCSF class 6003 (API Activity).
 
-## Format attendu
-Une ligne JSON par event, stage `ResponseComplete` typique :
+## Expected format
+One JSON line per event, typical `ResponseComplete` stage:
 ```json
 {
   "kind": "Event",
@@ -33,7 +33,7 @@ Une ligne JSON par event, stage `ResponseComplete` typique :
 }
 ```
 
-## Configuration cote source
+## Source-side configuration
 
 ### kube-apiserver flags
 ```
@@ -44,43 +44,43 @@ Une ligne JSON par event, stage `ResponseComplete` typique :
 --audit-log-maxsize=200
 ```
 
-### Audit policy minimale (`/etc/kubernetes/audit-policy.yaml`)
+### Minimal audit policy (`/etc/kubernetes/audit-policy.yaml`)
 ```yaml
 apiVersion: audit.k8s.io/v1
 kind: Policy
 rules:
-  # Ne pas logger les requetes health/metrics
+  # Do not log health/metrics requests
   - level: None
     nonResourceURLs: ["/healthz*", "/readyz*", "/livez*", "/metrics"]
-  # Events auth / RBAC en detail
+  # Auth / RBAC events in detail
   - level: RequestResponse
     resources:
       - group: rbac.authorization.k8s.io
         resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
-  # Pods / secrets / configmaps en Metadata
+  # Pods / secrets / configmaps at Metadata level
   - level: Metadata
     resources:
       - group: ""
         resources: ["pods", "secrets", "configmaps", "serviceaccounts"]
-  # Defaut : Metadata
+  # Default: Metadata
   - level: Metadata
 ```
 
-### Collecte du fichier
-- **K3s** : audit ecrit dans `/var/lib/rancher/k3s/server/logs/audit.log`
-- **kubeadm** : `/var/log/kubernetes/audit.log` (via hostPath)
-- Le parser Kolektor lit via `file` source : monter le chemin sur le pod Kolektor ou expedier via Fluent Bit / Vector agent side.
+### File collection
+- **K3s**: audit written to `/var/lib/rancher/k3s/server/logs/audit.log`
+- **kubeadm**: `/var/log/kubernetes/audit.log` (via hostPath)
+- The Kolektor parser reads via the `file` source: mount the path on the Kolektor pod or ship it agent-side via Fluent Bit / Vector.
 
 ## Variables
 | Variable         | Default                             | Description                     |
 |------------------|-------------------------------------|---------------------------------|
-| `K8S_AUDIT_LOG`  | `/var/log/kubernetes/audit.log`     | Chemin du fichier audit log     |
-| `TENANT_ID`      | -                                   | Injecte runtime                 |
-| `DATASOURCE_ID`  | -                                   | Injecte runtime                 |
-| `QUICKWIT_ENDPOINT` | -                                | Injecte runtime                 |
+| `K8S_AUDIT_LOG`  | `/var/log/kubernetes/audit.log`     | Audit log file path             |
+| `TENANT_ID`      | -                                   | Injected at runtime             |
+| `DATASOURCE_ID`  | -                                   | Injected at runtime             |
+| `QUICKWIT_ENDPOINT` | -                                | Injected at runtime             |
 
-## Mapping OCSF
-| Champ K8s audit                  | Champ OCSF                           |
+## OCSF mapping
+| K8s audit field                  | OCSF field                           |
 |----------------------------------|--------------------------------------|
 | `verb`                           | `api.operation`, `activity_id`       |
 | `requestURI`                     | `api.request.uri`                    |
@@ -101,8 +101,8 @@ rules:
 - `get`/`list`/`watch` → 2 (Read)
 - `update`/`patch`/`put` → 3 (Update)
 - `delete`/`deletecollection` → 4 (Delete)
-- autre → 99 (Other)
+- other → 99 (Other)
 
-## Liens
+## Links
 - [K8s Auditing docs](https://kubernetes.io/docs/tasks/debug/debug-cluster/audit/)
 - [OCSF 6003 API Activity](https://schema.ocsf.io/classes/api_activity)

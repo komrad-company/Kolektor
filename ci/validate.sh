@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Valide chaque vector.toml du catalog avec vector validate.
-# Vector 0.54 n'a pas de flag qui ignore les ${VAR} : on injecte des dummy runtime vars
-# pour que l'expansion reussisse. Ce sont de faux endpoints, pas utilises a la validation.
+# Validates each catalog vector.toml with vector validate.
+# Vector 0.54 has no flag that ignores ${VAR}: we inject dummy runtime vars
+# so that expansion succeeds. These are fake endpoints, not used during validation.
 set -euo pipefail
 
 export TENANT_ID="ci-validate"
@@ -43,7 +43,7 @@ for config in catalog/*/*/vector.toml; do
   fi
 done
 
-# Generer le JUnit XML
+# Generate the JUnit XML
 cat > "$RESULTS_DIR/validate-junit.xml" <<XMLEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>

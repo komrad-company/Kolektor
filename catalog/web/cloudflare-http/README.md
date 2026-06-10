@@ -1,16 +1,16 @@
 # Cloudflare HTTP Requests — Logpull / export JSONL
 
 ## Description
-Collecte les logs Cloudflare `http_requests` exportes en JSON line-delimited
-par Logpull, par un export object storage, ou par un futur fetcher Kolektor.
-Normalise en OCSF classe 4002 (HTTP Activity).
+Collects Cloudflare `http_requests` logs exported as line-delimited JSON
+by Logpull, by an object-storage export, or by a future Kolektor fetcher.
+Normalized to OCSF class 4002 (HTTP Activity).
 
-Les evenements parses conservent le JSON source dans `raw`. Les lignes JSON
-invalides ou sans champs requis (`ClientRequestMethod`, `ClientRequestHost`)
-partent dans `raw-logs`.
+Parsed events keep the source JSON in `raw`. Invalid JSON lines or lines
+missing required fields (`ClientRequestMethod`, `ClientRequestHost`)
+go to `raw-logs`.
 
-## Format attendu
-Une ligne JSON par requete, avec les champs Cloudflare HTTP Requests :
+## Expected format
+One JSON line per request, with the Cloudflare HTTP Requests fields:
 
 ```json
 {
@@ -28,25 +28,25 @@ Une ligne JSON par requete, avec les champs Cloudflare HTTP Requests :
 }
 ```
 
-Le parser accepte les timestamps RFC3339, Unix secondes, Unix millisecondes et
-UnixNano pour `EdgeStartTimestamp`, `EdgeEndTimestamp` ou `Datetime`.
+The parser accepts RFC3339, Unix seconds, Unix milliseconds and
+UnixNano timestamps for `EdgeStartTimestamp`, `EdgeEndTimestamp` or `Datetime`.
 
-## Source Vector
+## Vector source
 
-Fichier JSON line-delimited via `CLOUDFLARE_HTTP_LOG`. Pour eviter d'exposer
-un port entrant, le modele recommande est qu'un fetcher pull les logs Cloudflare
-et ecrive les lignes JSON dans ce fichier.
+Line-delimited JSON file via `CLOUDFLARE_HTTP_LOG`. To avoid exposing
+an inbound port, the recommended model is for a fetcher to pull the Cloudflare
+logs and write the JSON lines into this file.
 
 ## Variables
 | Variable                | Default                                  | Description                  |
 |-------------------------|------------------------------------------|------------------------------|
-| `CLOUDFLARE_HTTP_LOG`   | `/var/lib/kolektor/fetcher/cloudflare-http.jsonl` | Fichier JSONL optionnel |
-| `TENANT_ID`             | -                                        | Injecte runtime              |
-| `DATASOURCE_ID`         | -                                        | Injecte runtime              |
-| `QUICKWIT_ENDPOINT`     | -                                        | Endpoint Quickwit            |
+| `CLOUDFLARE_HTTP_LOG`   | `/var/lib/kolektor/fetcher/cloudflare-http.jsonl` | Optional JSONL file |
+| `TENANT_ID`             | -                                        | Injected at runtime          |
+| `DATASOURCE_ID`         | -                                        | Injected at runtime          |
+| `QUICKWIT_ENDPOINT`     | -                                        | Quickwit endpoint            |
 
-## Mapping OCSF
-| Champ Cloudflare          | Champ OCSF / Kolektor              |
+## OCSF mapping
+| Cloudflare field          | OCSF / Kolektor field              |
 |---------------------------|------------------------------------|
 | `ClientRequestMethod`     | `http_request.http_method`         |
 | `ClientRequestHost`       | `http_request.url.hostname`        |
@@ -66,14 +66,14 @@ et ecrive les lignes JSON dans ce fichier.
 | `SecurityAction(s)`       | `unmapped.security_*`              |
 | `BotScore`, WAF scores    | `unmapped.bot_*`, `unmapped.waf_*` |
 
-## Severite
+## Severity
 | Condition                              | `severity_id` |
 |----------------------------------------|---------------|
-| Action de mitigation WAF/security      | 3             |
+| WAF/security mitigation action         | 3             |
 | `EdgeResponseStatus >= 500`            | 4             |
 | `EdgeResponseStatus >= 400`            | 2             |
-| Autre                                  | 1             |
+| Other                                  | 1             |
 
-## Liens
+## Links
 - [Cloudflare HTTP requests fields](https://developers.cloudflare.com/logs/logpush/logpush-job/datasets/zone/http_requests/)
 - [Cloudflare Logpush datasets](https://developers.cloudflare.com/logs/reference/log-fields/)

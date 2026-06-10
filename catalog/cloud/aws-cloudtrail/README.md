@@ -1,10 +1,10 @@
 # AWS CloudTrail — API Activity
 
 ## Description
-Collecte les logs CloudTrail AWS (JSON).
-Normalise en OCSF classe 6003 (API Activity).
+Collects AWS CloudTrail logs (JSON).
+Normalises to OCSF class 6003 (API Activity).
 
-## Format attendu
+## Expected format
 ```json
 {
   "eventVersion": "1.08",
@@ -18,23 +18,23 @@ Normalise en OCSF classe 6003 (API Activity).
 }
 ```
 
-## Configuration cote source
+## Source-side configuration
 
-### Option 1 : S3 + SQS (recommande)
-Configurer CloudTrail pour ecrire dans S3, puis Vector lit via source `aws_s3`.
+### Option 1: S3 + SQS (recommended)
+Configure CloudTrail to write to S3, then Vector reads via the `aws_s3` source.
 
-### Option 2 : HTTP forward
-Utiliser un Lambda ou un Firehose pour forwarder les events en JSON vers Vector HTTP.
+### Option 2: HTTP forward
+Use a Lambda or a Firehose to forward events as JSON to Vector HTTP.
 
-### Option 3 : Fichier local
-Si les logs sont telecharges/synchronises localement.
+### Option 3: Local file
+If the logs are downloaded/synchronised locally.
 
 ## Variables
-| Variable    | Default | Description              |
-|------------|---------|--------------------------|
-| LISTEN_PORT | 8516   | Port HTTP d'ecoute       |
+| Variable    | Default | Description        |
+|------------|---------|--------------------|
+| LISTEN_PORT | 8516   | HTTP listen port   |
 
-## Mapping OCSF
+## OCSF mapping
 | CloudTrail        | OCSF                      |
 |-------------------|---------------------------|
 | eventName         | api.operation, activity_id (verb) |
@@ -44,6 +44,6 @@ Si les logs sont telecharges/synchronises localement.
 | errorCode         | api.response.error        |
 | awsRegion         | cloud.region              |
 
-## Liens
+## Links
 - [CloudTrail record format](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-event-reference-record-contents.html)
 - [Vector HTTP source](https://vector.dev/docs/reference/configuration/sources/http_server/)
