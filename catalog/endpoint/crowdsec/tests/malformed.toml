@@ -1,0 +1,35 @@
+[[tests]]
+name = "CrowdSec — missing scenario (invalid)"
+
+[[tests.inputs]]
+insert_at = "crowdsec_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message  = "garbage payload without a scenario"
+  start_at = "2024-04-14T12:00:00Z"
+
+[[tests.outputs]]
+extract_from = "crowdsec_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+'''
+
+[[tests.outputs]]
+extract_from = "crowdsec_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "endpoint/crowdsec")
+  assert_eq!(.parser, "crowdsec")
+  assert_eq!(.parse_error, "crowdsec_scenario_missing")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+  assert!(exists(.tenant_id))
+  assert!(exists(.datasource_id))
+'''

@@ -1,0 +1,39 @@
+[[tests]]
+name = "CrowdSec — alert without decisions, remediation off (Low)"
+
+[[tests.inputs]]
+insert_at = "crowdsec_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  scenario     = "crowdsecurity/http-probing"
+  message      = "Ip 5.6.7.8 performed 'crowdsecurity/http-probing' (12 events over 30s)"
+  events_count = 12
+  remediation  = false
+  start_at     = "2024-04-14T11:00:00Z"
+
+  [tests.inputs.log_fields.source]
+  scope = "Ip"
+  value = "5.6.7.8"
+  ip    = "5.6.7.8"
+
+[[tests.outputs]]
+extract_from = "crowdsec_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 2001)
+  assert_eq!(.category_uid, 2)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.severity_id, 2)
+  assert_eq!(.finding_info.title, "crowdsecurity/http-probing")
+  assert_eq!(.finding_info.uid, null)
+  assert_eq!(.src_endpoint.ip, "5.6.7.8")
+  assert_eq!(.src_endpoint.location.country, null)
+  assert_eq!(.src_endpoint.location.isp, null)
+  assert_eq!(.metadata.version, null)
+  assert_eq!(.unmapped.decision_type, null)
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

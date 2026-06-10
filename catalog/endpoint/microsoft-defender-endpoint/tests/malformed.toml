@@ -1,0 +1,66 @@
+[[tests]]
+name = "Defender — event with no Title (not an alert)"
+
+[[tests.inputs]]
+insert_at = "defender_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  Timestamp  = "2024-04-14T10:23:45.1234567Z"
+  DeviceId   = "abc"
+  DeviceName = "WIN-01"
+  Severity   = "High"
+
+[[tests.outputs]]
+extract_from = "defender_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+'''
+
+[[tests.outputs]]
+extract_from = "defender_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "endpoint/microsoft-defender-endpoint")
+  assert_eq!(.parser, "microsoft-defender-endpoint")
+  assert_eq!(.parse_error, "defender_title_missing")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+  assert!(exists(.tenant_id))
+  assert!(exists(.datasource_id))
+'''
+
+[[tests]]
+name = "Defender — empty payload routed to raw-logs"
+
+[[tests.inputs]]
+insert_at = "defender_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  unrelated = "no defender fields at all"
+
+[[tests.outputs]]
+extract_from = "defender_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+'''
+
+[[tests.outputs]]
+extract_from = "defender_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.parse_error, "defender_title_missing")
+'''

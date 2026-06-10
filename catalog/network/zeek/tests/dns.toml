@@ -1,0 +1,61 @@
+[[tests]]
+name = "Zeek — dns.log with answers routes to ocsf-dns (class 4003, activity Response)"
+
+[[tests.inputs]]
+insert_at = "zeek_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"_path":"dns","ts":1713091425.5,"id.orig_h":"10.0.0.5","query":"example.com","qtype_name":"A","rcode_name":"NOERROR","answers":["1.2.3.4"]}'
+
+[[tests.outputs]]
+extract_from = "zeek_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4003)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.activity_id, 2)
+  assert_eq!(.time, 1713091425500)
+  assert_eq!(.src_endpoint.ip, "10.0.0.5")
+  assert_eq!(.query.hostname, "example.com")
+  assert_eq!(.query.type, "A")
+  assert_eq!(.query.rcode, "NOERROR")
+  assert_eq!(.answers[0], "1.2.3.4")
+  assert!(exists(.uid))
+'''
+
+# Confirm the 4003 event reaches the dns route.
+[[tests.outputs]]
+extract_from = "zeek_route_by_class.dns"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4003)
+  assert_eq!(.activity_id, 2)
+'''
+
+[[tests]]
+name = "Zeek — dns.log without answers maps to activity Query (1)"
+
+[[tests.inputs]]
+insert_at = "zeek_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"_path":"dns","ts":1713091425.6,"id.orig_h":"10.0.0.5","query":"example.org","qtype_name":"AAAA"}'
+
+[[tests.outputs]]
+extract_from = "zeek_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4003)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.query.hostname, "example.org")
+  assert_eq!(.query.type, "AAAA")
+'''

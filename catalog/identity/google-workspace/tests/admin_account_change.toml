@@ -1,0 +1,50 @@
+[[tests]]
+name = "Google Workspace — admin activity routes to Account Change"
+
+[[tests.inputs]]
+insert_at = "google_workspace_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  kind      = "admin#reports#activity"
+  ipAddress = "203.0.113.7"
+
+  [tests.inputs.log_fields.id]
+  time            = "2024-04-14T12:30:15Z"
+  uniqueQualifier = "-55512"
+  applicationName = "admin"
+  customerId      = "C01"
+
+  [tests.inputs.log_fields.actor]
+  email     = "admin@corp.com"
+  profileId = "9001"
+
+  [[tests.inputs.log_fields.events]]
+  type = "USER_SETTINGS"
+  name = "CREATE_USER"
+
+    [[tests.inputs.log_fields.events.parameters]]
+    name  = "USER_EMAIL"
+    value = "newhire@corp.com"
+
+  [[tests.inputs.log_fields.events]]
+  type = "USER_SETTINGS"
+  name = "GRANT_ADMIN_PRIVILEGE"
+
+[[tests.outputs]]
+extract_from = "google_workspace_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3001)
+  assert_eq!(.category_uid, 3)
+  assert_eq!(.activity_id, 99)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.actor.user.email_addr, "admin@corp.com")
+  assert_eq!(.src_endpoint.ip, "203.0.113.7")
+  assert_eq!(.unmapped.application_name, "admin")
+  assert_eq!(.unmapped.event_name, "CREATE_USER")
+  assert_eq!(length(array!(.unmapped.extra_events)), 1)
+  assert!(exists(.raw))
+'''

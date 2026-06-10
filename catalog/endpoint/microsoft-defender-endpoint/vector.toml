@@ -1,0 +1,212 @@
+# ==============================================================================
+# Microsoft Defender for Endpoint — alerts/events (Streaming API, JSON)
+# OCSF Class : 2001 (Security Finding)
+# Input      : HTTP (JSON) — Event Hub / HTTP forwarder push
+# Tested with: Advanced Hunting schema (AlertEvidence / DeviceEvents)
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.defender_input]
+type     = "http_server"
+address  = "0.0.0.0:${LISTEN_PORT:-8521}"
+encoding = "json"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.defender_parse_and_normalize]
+type   = "remap"
+inputs = ["defender_input"]
+source = '''
+  # JSON source already decoded by Vector: capture raw before mutation.
+  raw_msg = encode_json(.)
+
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  # Defender Advanced Hunting fields (AlertEvidence / DeviceEvents) :
+  # Timestamp, DeviceId, DeviceName, AlertId, Title, Severity, Category,
+  # FileName, FolderPath, ProcessCommandLine, AccountName, AccountDomain,
+  # InitiatingProcessFileName, RemoteIP
+  # A Defender alert always carries a Title. Its absence = not an alert event.
+  title = to_string(.Title) ?? ""
+  valid = title != ""
+
+  if valid {
+    # Timestamp : ISO 8601 with 7-digit fractional seconds (e.g. ...1234567Z).
+    # %+ parses RFC3339; fall back to now() if absent or malformed.
+    ts_str = to_string(.Timestamp) ?? ""
+    parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+    ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+
+    # Severity (string) → OCSF severity_id.
+    # Informational→1, Low→2, Medium→3, High→4, Critical→5, else 1.
+    severity_name = to_string(.Severity) ?? ""
+    ocsf_severity = 1
+    if severity_name == "Critical" {
+      ocsf_severity = 5
+    } else if severity_name == "High" {
+      ocsf_severity = 4
+    } else if severity_name == "Medium" {
+      ocsf_severity = 3
+    } else if severity_name == "Low" {
+      ocsf_severity = 2
+    } else if severity_name == "Informational" {
+      ocsf_severity = 1
+    }
+
+    .class_uid    = 2001
+    .category_uid = 2
+    .activity_id  = 1
+    .severity_id  = ocsf_severity
+    .time         = ts
+
+    # to_string(null)="" is infallible, so a bare `to_string(.X) ?? null` on an
+    # absent field yields "" (never null). Guard every optional field with an
+    # explicit `if .X != null` so a missing field stays null in the output.
+    file_name        = if .FileName != null { to_string(.FileName) ?? null } else { null }
+    folder_path      = if .FolderPath != null { to_string(.FolderPath) ?? null } else { null }
+    process_cmd_line = if .ProcessCommandLine != null { to_string(.ProcessCommandLine) ?? null } else { null }
+    initiating_name  = if .InitiatingProcessFileName != null { to_string(.InitiatingProcessFileName) ?? null } else { null }
+    account_name     = if .AccountName != null { to_string(.AccountName) ?? null } else { null }
+    account_domain   = if .AccountDomain != null { to_string(.AccountDomain) ?? null } else { null }
+    device_uid       = if .DeviceId != null { to_string(.DeviceId) ?? null } else { null }
+    device_hostname  = if .DeviceName != null { to_string(.DeviceName) ?? null } else { null }
+    alert_id         = if .AlertId != null { to_string(.AlertId) ?? null } else { null }
+    category         = if .Category != null { to_string(.Category) ?? null } else { null }
+
+    # Process file name : FileName, else the initiating process.
+    process_name = if file_name != null { file_name } else { initiating_name }
+
+    .process = {
+      "name":     process_name,
+      "cmd_line": process_cmd_line,
+      "file": {
+        "name": file_name,
+        "path": folder_path
+      }
+    }
+
+    .actor = {
+      "user": {
+        "name":   account_name,
+        "domain": account_domain
+      },
+      "process": {
+        "name": initiating_name
+      }
+    }
+
+    .device = {
+      "uid":      device_uid,
+      "hostname": device_hostname
+    }
+
+    # RemoteIP is the external peer in a Defender event → destination endpoint.
+    remote_ip = if .RemoteIP != null { to_string(.RemoteIP) ?? null } else { null }
+
+    .src_endpoint = {
+      "hostname": device_hostname
+    }
+
+    .dst_endpoint = {
+      "ip": remote_ip
+    }
+
+    .finding_info = {
+      "title": title,
+      "uid":   alert_id,
+      "types": [category]
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "Microsoft Defender for Endpoint",
+        "vendor_name": "Microsoft"
+      },
+      "version": "1.0.0",
+      "uid":     alert_id
+    }
+
+    .unmapped = {
+      "category": category
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  .raw = raw_msg
+  .uid = uuid_v4()
+  del(.Timestamp)
+  del(.DeviceId)
+  del(.DeviceName)
+  del(.AlertId)
+  del(.Title)
+  del(.Severity)
+  del(.Category)
+  del(.FileName)
+  del(.FolderPath)
+  del(.ProcessCommandLine)
+  del(.AccountName)
+  del(.AccountDomain)
+  del(.InitiatingProcessFileName)
+  del(.RemoteIP)
+  del(.source_type)
+'''
+
+# --- FILTER ---
+[transforms.defender_filter_valid]
+type      = "filter"
+inputs    = ["defender_parse_and_normalize"]
+condition = '.class_uid == 2001'
+
+[transforms.defender_filter_failed]
+type      = "filter"
+inputs    = ["defender_parse_and_normalize"]
+condition = '.class_uid != 2001'
+
+[transforms.defender_raw_failed]
+type   = "remap"
+inputs = ["defender_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "endpoint/microsoft-defender-endpoint",
+    "parser":        "microsoft-defender-endpoint",
+    "parse_status":  "failed",
+    "parse_error":   "defender_title_missing",
+    "raw":           .raw
+  }
+'''
+
+# --- SINK : Quickwit ocsf-endpoint ---
+[sinks.defender_quickwit]
+type                = "http"
+inputs              = ["defender_filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.defender_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.defender_quickwit_raw_failed]
+type                = "http"
+inputs              = ["defender_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.defender_quickwit_raw_failed.request]
+headers.Content-Type = "application/x-ndjson"

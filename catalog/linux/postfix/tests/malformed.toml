@@ -1,0 +1,45 @@
+[[tests]]
+name = "postfix — non-mail line falls through to raw-logs"
+
+[[tests.inputs]]
+insert_at = "postfix_parse_and_normalize"
+type      = "log"
+
+  # A maillog line carrying no recognised event (daemon startup notice). The
+  # transform must not panic: every regex returns {}, all fields stay null,
+  # class_uid stays 0 so the event is routed to raw-logs, never to OCSF.
+  [tests.inputs.log_fields]
+  message  = "master[1990]: daemon started -- version 3.6.4, configuration /etc/postfix"
+  appname  = "postfix/master"
+  hostname = "mail01"
+  procid   = "1990"
+
+[[tests.outputs]]
+extract_from = "postfix_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.severity_id, 0)
+  assert_eq!(.email.from, null)
+  assert_eq!(.email.to, null)
+  assert_eq!(.src_endpoint.ip, null)
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''
+
+[[tests.outputs]]
+extract_from = "postfix_raw_only"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "linux/postfix")
+  assert_eq!(.parse_error, "postfix_pattern_unmatched")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+  assert!(exists(.tenant_id))
+  assert!(exists(.datasource_id))
+'''

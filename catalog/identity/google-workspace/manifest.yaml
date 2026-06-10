@@ -1,0 +1,16 @@
+display_name: Google Workspace
+default_port: 8523
+ocsf_outputs:
+  - class_uid: 3002
+    category_uid: 3
+    index: ocsf-identity
+    route: identity
+  - class_uid: 3001
+    category_uid: 3
+    index: ocsf-identity
+    route: identity
+  - class_uid: 6003
+    category_uid: 6
+    index: ocsf-audit
+    route: audit
+version: 0.1.0

@@ -1,0 +1,35 @@
+[[tests]]
+name = "Okta — failed session end, optional fields absent (Authentication 3002, Logoff)"
+
+[[tests.inputs]]
+insert_at = "okta_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  uuid      = "f9f8f7f6-aaaa-bbbb-cccc-ddddeeeeffff"
+  published = "2024-04-14T11:00:00.000Z"
+  eventType = "user.session.end"
+  severity  = "WARN"
+
+  [tests.inputs.log_fields.outcome]
+  result = "FAILURE"
+
+[[tests.outputs]]
+extract_from = "okta_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3002)
+  assert_eq!(.category_uid, 3)
+  assert_eq!(.activity_id, 2)
+  assert_eq!(.severity_id, 3)
+  assert_eq!(.status, "Failure")
+  assert_eq!(.status_id, 2)
+  assert_eq!(.time, 1713092400000)
+  assert_eq!(.actor.user.name, "")
+  assert_eq!(.actor.user.uid, "")
+  assert_eq!(.src_endpoint.ip, "")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

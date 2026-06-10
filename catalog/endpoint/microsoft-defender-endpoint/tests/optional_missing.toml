@@ -1,0 +1,38 @@
+[[tests]]
+name = "Defender — minimal alert, optional fields absent"
+
+[[tests.inputs]]
+insert_at = "defender_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  Timestamp = "2024-04-14T10:23:45.0000000Z"
+  AlertId   = "da999"
+  Title     = "Anomalous login"
+  Severity  = "Unrated"
+
+[[tests.outputs]]
+extract_from = "defender_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 2001)
+  assert_eq!(.category_uid, 2)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.time, 1713090225000)
+  assert_eq!(.finding_info.title, "Anomalous login")
+  assert_eq!(.finding_info.uid, "da999")
+  assert_eq!(.process.name, null)
+  assert_eq!(.process.cmd_line, null)
+  assert_eq!(.process.file.name, null)
+  assert_eq!(.actor.user.name, null)
+  assert_eq!(.actor.user.domain, null)
+  assert_eq!(.actor.process.name, null)
+  assert_eq!(.device.uid, null)
+  assert_eq!(.dst_endpoint.ip, null)
+  assert_eq!(.metadata.product.vendor_name, "Microsoft")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

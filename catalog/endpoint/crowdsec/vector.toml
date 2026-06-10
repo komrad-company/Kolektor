@@ -1,0 +1,201 @@
+# ==============================================================================
+# CrowdSec — alerts via HTTP notification plugin
+# OCSF Class : 2001 (Security Finding)
+# Input      : HTTP (JSON)
+# Tested with: CrowdSec 1.6 http notification plugin payloads
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.crowdsec_input]
+type     = "http_server"
+address  = "0.0.0.0:${LISTEN_PORT:-8520}"
+encoding = "json"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.crowdsec_parse_and_normalize]
+type   = "remap"
+inputs = ["crowdsec_input"]
+source = '''
+  raw_msg = encode_json(.)
+
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  # CrowdSec alert JSON structure :
+  # scenario, scenario_hash, scenario_version, message, events_count,
+  # source.{scope, value, ip, cn, as_name, latitude}, remediation,
+  # decisions[].{type, scope, value, duration, origin, scenario}, start_at, stop_at
+  # to_string() without `!` : returns null on missing field instead of panic
+  # (CrowdSec sends alerts with no decision when remediation is disabled).
+  scenario = to_string(.scenario) ?? ""
+  valid = scenario != ""
+
+  if valid {
+    # Timestamp : ISO 8601 from start_at, fallback to now()
+    ts_str = to_string(.start_at) ?? ""
+    parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+    ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp(now(), unit: "milliseconds") }
+
+    # Decisions drive remediation severity. A ban/captcha is an active block (High).
+    decisions = array(.decisions) ?? []
+    has_blocking_decision = false
+    for_each(decisions) -> |_index, decision| {
+      decision_type = downcase(to_string(get(decision, ["type"]) ?? "") ?? "")
+      if decision_type == "ban" || decision_type == "captcha" {
+        has_blocking_decision = true
+      }
+    }
+
+    remediation_active = .remediation == true
+
+    # Pre-computed: no inline `if` is allowed inside an object literal.
+    ocsf_severity = 2
+    if has_blocking_decision {
+      ocsf_severity = 4
+    } else if remediation_active {
+      ocsf_severity = 3
+    }
+
+    # Security Finding : a CrowdSec alert is a generated finding -> 1 (Generate).
+    activity_id = 1
+
+    events_count_raw = .events_count
+    events_count = if events_count_raw != null { to_int(events_count_raw) ?? null } else { null }
+
+    # string() (no `to_`) errors on null, so `?? null` yields a genuine null
+    # for absent fields. to_string(null) would return "" instead.
+    src = object(.source) ?? {}
+    src_ip = string(get(src, ["ip"]) ?? null) ?? null
+    src_scope = string(get(src, ["scope"]) ?? null) ?? null
+    src_value = string(get(src, ["value"]) ?? null) ?? null
+    src_cn = string(get(src, ["cn"]) ?? null) ?? null
+    src_as_name = string(get(src, ["as_name"]) ?? null) ?? null
+
+    first_decision = object(get(decisions, [0]) ?? {}) ?? {}
+    decision_type = string(get(first_decision, ["type"]) ?? null) ?? null
+    decision_duration = string(get(first_decision, ["duration"]) ?? null) ?? null
+    decision_origin = string(get(first_decision, ["origin"]) ?? null) ?? null
+
+    .class_uid    = 2001
+    .category_uid = 2
+    .activity_id  = activity_id
+    .severity_id  = ocsf_severity
+    .time         = ts
+
+    scenario_hash = string(.scenario_hash) ?? null
+    message_text = string(.message) ?? null
+    scenario_version = string(.scenario_version) ?? null
+    stop_at = string(.stop_at) ?? null
+
+    .finding_info = {
+      "title": scenario,
+      "uid":   scenario_hash,
+      "desc":  message_text
+    }
+
+    .src_endpoint = {
+      "ip": src_ip,
+      "location": {
+        "country": src_cn,
+        "isp":     src_as_name
+      }
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "CrowdSec",
+        "vendor_name": "CrowdSec"
+      },
+      "version":      scenario_version,
+      "log_provider": "crowdsec-notification"
+    }
+
+    .unmapped = {
+      "scenario":          scenario,
+      "events_count":      events_count,
+      "remediation":       .remediation,
+      "source_scope":      src_scope,
+      "source_value":      src_value,
+      "decision_type":     decision_type,
+      "decision_duration": decision_duration,
+      "decision_origin":   decision_origin,
+      "stop_at":           stop_at
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  .raw = raw_msg
+  .uid = uuid_v4()
+
+  del(.scenario)
+  del(.scenario_hash)
+  del(.scenario_version)
+  del(.message)
+  del(.events_count)
+  del(.source)
+  del(.remediation)
+  del(.decisions)
+  del(.start_at)
+  del(.stop_at)
+  del(.source_type)
+'''
+
+# --- FILTER ---
+[transforms.crowdsec_filter_valid]
+type      = "filter"
+inputs    = ["crowdsec_parse_and_normalize"]
+condition = '.class_uid == 2001'
+
+[transforms.crowdsec_filter_failed]
+type      = "filter"
+inputs    = ["crowdsec_parse_and_normalize"]
+condition = '.class_uid != 2001'
+
+[transforms.crowdsec_raw_failed]
+type   = "remap"
+inputs = ["crowdsec_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "endpoint/crowdsec",
+    "parser":        "crowdsec",
+    "parse_status":  "failed",
+    "parse_error":   "crowdsec_scenario_missing",
+    "raw":           .raw
+  }
+'''
+
+# --- SINK : Quickwit OCSF ---
+[sinks.crowdsec_quickwit]
+type                = "http"
+inputs              = ["crowdsec_filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.crowdsec_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.crowdsec_quickwit_raw_failed]
+type                = "http"
+inputs              = ["crowdsec_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.crowdsec_quickwit_raw_failed.request]
+headers.Content-Type = "application/x-ndjson"

@@ -1,0 +1,60 @@
+[[tests]]
+name = "Google Workspace — successful login routes to Authentication"
+
+[[tests.inputs]]
+insert_at = "google_workspace_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  kind      = "admin#reports#activity"
+  ipAddress = "1.2.3.4"
+
+  [tests.inputs.log_fields.id]
+  time            = "2024-04-14T10:23:45.123Z"
+  uniqueQualifier = "-12345"
+  applicationName = "login"
+  customerId      = "C01"
+
+  [tests.inputs.log_fields.actor]
+  email     = "jdoe@corp.com"
+  profileId = "1122"
+
+  [[tests.inputs.log_fields.events]]
+  type = "login"
+  name = "login_success"
+
+    [[tests.inputs.log_fields.events.parameters]]
+    name  = "login_type"
+    value = "google_password"
+
+    [[tests.inputs.log_fields.events.parameters]]
+    name      = "is_suspicious"
+    boolValue = false
+
+[[tests.outputs]]
+extract_from = "google_workspace_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3002)
+  assert_eq!(.category_uid, 3)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.status, "Success")
+  assert_eq!(.status_id, 1)
+  assert_eq!(.time, 1713090225123)
+  assert_eq!(.actor.user.email_addr, "jdoe@corp.com")
+  assert_eq!(.actor.user.uid, "1122")
+  assert_eq!(.src_endpoint.ip, "1.2.3.4")
+  assert_eq!(.metadata.product.name, "Google Workspace")
+  assert_eq!(.metadata.product.vendor_name, "Google")
+  assert_eq!(.metadata.uid, "-12345")
+  assert_eq!(.unmapped.application_name, "login")
+  assert_eq!(.unmapped.event_name, "login_success")
+  assert!(exists(.tenant_id))
+  assert!(exists(.datasource_id))
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+  assert!(exists(.received_time))
+'''

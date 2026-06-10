@@ -1,0 +1,210 @@
+# ==============================================================================
+# Okta — System Log API events
+# OCSF Classes : 3002 (Authentication — session/auth) · 3001 (Account Change —
+#                lifecycle/group/account) · 6003 (API Activity — everything else)
+# Input        : HTTP push — a System Log fetcher POSTs each LogEvent JSON on
+#                ${LISTEN_PORT:-8522}.
+# Tested with  : Okta System Log API v1 (LogEvent schema)
+# ==============================================================================
+
+[sources.okta_input]
+type     = "http_server"
+address  = "0.0.0.0:${LISTEN_PORT:-8522}"
+encoding = "json"
+
+[transforms.okta_parse_and_normalize]
+type   = "remap"
+inputs = ["okta_input"]
+source = '''
+  tenant_id     = "${TENANT_ID}"
+  datasource_id = "${DATASOURCE_ID}"
+  received_time = to_unix_timestamp(now(), unit: "milliseconds")
+  raw_msg       = encode_json(.)
+
+  event_type = to_string(.eventType) ?? ""
+  is_valid   = event_type != ""
+
+  # Timestamp: Okta `published` is ISO 8601 with milliseconds.
+  ts_str    = to_string(.published) ?? ""
+  parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+  ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { received_time }
+
+  # Severity map (Okta severity → OCSF severity_id). Unknown → Informational.
+  okta_severity = to_string(.severity) ?? ""
+  severity_id = 1
+  if okta_severity == "WARN" {
+    severity_id = 3
+  } else if okta_severity == "ERROR" {
+    severity_id = 4
+  }
+
+  # Outcome → status_id / status (SUCCESS → 1, FAILURE → 2, unknown → 0).
+  outcome_obj    = object(.outcome) ?? {}
+  outcome_result = to_string(get(outcome_obj, ["result"]) ?? "") ?? ""
+  status_id = 0
+  status    = "Unknown"
+  if outcome_result == "SUCCESS" {
+    status_id = 1
+    status    = "Success"
+  } else if outcome_result == "FAILURE" {
+    status_id = 2
+    status    = "Failure"
+  }
+
+  # Actor → OCSF user (alternateId is the principal name, displayName the label).
+  actor_obj = object(.actor) ?? {}
+  actor_user = {
+    "name": to_string(get(actor_obj, ["alternateId"]) ?? null) ?? null,
+    "uid":  to_string(get(actor_obj, ["id"])          ?? null) ?? null,
+    "full_name": to_string(get(actor_obj, ["displayName"]) ?? null) ?? null
+  }
+
+  # Client → src_endpoint.
+  client_obj = object(.client) ?? {}
+  src_ip     = to_string(get(client_obj, ["ipAddress"]) ?? null) ?? null
+
+  # Routing classification by eventType prefix (D1 / D6 enums).
+  ocsf_class_uid    = 0
+  ocsf_category_uid = 0
+  ocsf_activity_id  = 0
+
+  if starts_with(event_type, "user.session.") || starts_with(event_type, "user.authentication.") {
+    ocsf_class_uid    = 3002
+    ocsf_category_uid = 3
+    # Authentication activity_id: Logon (1) / Logoff (2) / Other (99).
+    if event_type == "user.session.end" {
+      ocsf_activity_id = 2
+    } else if starts_with(event_type, "user.session.") || starts_with(event_type, "user.authentication.") {
+      ocsf_activity_id = 1
+    } else {
+      ocsf_activity_id = 99
+    }
+  } else if starts_with(event_type, "user.lifecycle.") || starts_with(event_type, "group.") || starts_with(event_type, "user.account.") {
+    ocsf_class_uid    = 3001
+    ocsf_category_uid = 3
+    # Account Change verbs are not deterministically derivable from the Okta
+    # eventType string; default to Other.
+    ocsf_activity_id  = 99
+  } else if is_valid {
+    ocsf_class_uid    = 6003
+    ocsf_category_uid = 6
+    # API Activity activity_id from the eventType verb (Create/Read/Update/Delete/Other).
+    ocsf_activity_id  = 99
+    if contains(event_type, ".create") || contains(event_type, ".add") {
+      ocsf_activity_id = 1
+    } else if contains(event_type, ".read") || contains(event_type, ".list") || contains(event_type, ".get") {
+      ocsf_activity_id = 2
+    } else if contains(event_type, ".update") || contains(event_type, ".set") {
+      ocsf_activity_id = 3
+    } else if contains(event_type, ".delete") || contains(event_type, ".remove") {
+      ocsf_activity_id = 4
+    }
+  }
+
+  ocsf_metadata = {
+    "product": {
+      "name":        "Okta",
+      "vendor_name": "Okta"
+    },
+    "version": "1.0.0",
+    "uid":     to_string(.uuid) ?? null
+  }
+
+  ocsf_unmapped = {
+    "event_type":      event_type,
+    "display_message": to_string(.displayMessage) ?? null,
+    "outcome_reason":  to_string(get(outcome_obj, ["reason"]) ?? null) ?? null,
+    "user_agent":      to_string(get(object(get(client_obj, ["userAgent"]) ?? {}) ?? {}, ["rawUserAgent"]) ?? null) ?? null,
+    "geo":             get(client_obj, ["geographicalContext"]) ?? null,
+    "target":          .target
+  }
+
+  . = {
+    "class_uid":     ocsf_class_uid,
+    "category_uid":  ocsf_category_uid,
+    "activity_id":   ocsf_activity_id,
+    "severity_id":   severity_id,
+    "time":          ts,
+    "status":        status,
+    "status_id":     status_id,
+    "actor":         { "user": actor_user },
+    "src_endpoint":  { "ip": src_ip },
+    "metadata":      ocsf_metadata,
+    "unmapped":      ocsf_unmapped,
+    "tenant_id":     tenant_id,
+    "datasource_id": datasource_id,
+    "received_time": received_time,
+    "raw":           raw_msg,
+    "uid":           uuid_v4()
+  }
+'''
+
+[transforms.okta_filter_valid]
+type      = "filter"
+inputs    = ["okta_parse_and_normalize"]
+condition = '.class_uid != 0'
+
+[transforms.okta_filter_failed]
+type      = "filter"
+inputs    = ["okta_parse_and_normalize"]
+condition = '.class_uid == 0'
+
+[transforms.okta_route_by_class]
+type   = "route"
+inputs = ["okta_filter_valid"]
+route.identity = '.class_uid == 3002 || .class_uid == 3001'
+route.audit    = '.class_uid == 6003'
+
+[transforms.okta_raw_failed]
+type   = "remap"
+inputs = ["okta_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "identity/okta",
+    "parser":        "okta",
+    "parse_status":  "failed",
+    "parse_error":   "okta_event_type_missing",
+    "raw":           .raw
+  }
+'''
+
+[sinks.okta_quickwit_identity]
+type                = "http"
+inputs              = ["okta_route_by_class.identity"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-identity/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.okta_quickwit_identity.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.okta_quickwit_audit]
+type                = "http"
+inputs              = ["okta_route_by_class.audit"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-audit/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.okta_quickwit_audit.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.okta_quickwit_raw_failed]
+type                = "http"
+inputs              = ["okta_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.okta_quickwit_raw_failed.request]
+headers.Content-Type = "application/x-ndjson"

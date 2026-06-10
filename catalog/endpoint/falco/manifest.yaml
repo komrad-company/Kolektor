@@ -1,0 +1,5 @@
+display_name: Falco
+default_port: 8519
+ocsf_class_uid: 2001
+ocsf_category_uid: 2
+version: 0.1.0

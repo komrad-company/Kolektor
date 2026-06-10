@@ -1,0 +1,243 @@
+# ==============================================================================
+# Zeek — JSON logs (conn / dns / http / ssl)
+# OCSF Classes: 4001 (Network), 4002 (HTTP), 4003 (DNS)
+# Input       : File (JSON per line, Zeek json-streaming-* logs)
+# Tested with : Zeek 6.x JSON-mode logs
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.zeek_input]
+type    = "file"
+include = ["${ZEEK_LOG_DIR:-/var/log/zeek}/*.log"]
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.zeek_parse_and_normalize]
+type   = "remap"
+inputs = ["zeek_input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  raw_msg = string!(.message)
+  parsed = parse_json(raw_msg) ?? null
+  valid_json = is_object(parsed)
+
+  if valid_json {
+    ev = object!(parsed)
+
+    # Zeek JSON-mode names each log type via `_path` (conn, dns, http, ssl).
+    log_path = downcase(to_string(get(ev, ["_path"]) ?? "") ?? "")
+    supported = log_path == "conn" || log_path == "dns" || log_path == "http" || log_path == "ssl"
+
+    # Zeek `ts` is epoch seconds as a float -> OCSF epoch milliseconds.
+    ts_raw = get(ev, ["ts"]) ?? null
+    ts_float = if ts_raw != null { to_float(ts_raw) ?? null } else { null }
+    ts_ms = if ts_float != null { ts_float * 1000.0 ?? null } else { null }
+    ts = if ts_ms != null { to_int(ts_ms) } else { to_unix_timestamp(now(), unit: "milliseconds") }
+
+    # Endpoints. Zeek dotted keys (`id.orig_h`) are literal map keys, not paths.
+    src_ip = to_string(get(ev, ["id.orig_h"]) ?? null) ?? null
+    dst_ip = to_string(get(ev, ["id.resp_h"]) ?? null) ?? null
+    src_port_raw = get(ev, ["id.orig_p"]) ?? null
+    dst_port_raw = get(ev, ["id.resp_p"]) ?? null
+    src_port = if src_port_raw != null { to_int(src_port_raw) ?? null } else { null }
+    dst_port = if dst_port_raw != null { to_int(dst_port_raw) ?? null } else { null }
+
+    conn_state = upcase(to_string(get(ev, ["conn_state"]) ?? "") ?? "")
+    method_upper = upcase(to_string(get(ev, ["method"]) ?? "") ?? "")
+    dns_answers = get(ev, ["answers"]) ?? null
+    has_answers = is_array(dns_answers) && length(array(dns_answers) ?? []) > 0
+
+    # class per _path: conn/ssl -> 4001, http -> 4002, dns -> 4003.
+    class_uid = if !supported { 0 } else if log_path == "dns" { 4003 } else if log_path == "http" { 4002 } else { 4001 }
+    category_uid = if class_uid == 0 { 0 } else { 4 }
+
+    # activity_id per class (pre-computed: no `if` inside object literals).
+    # conn  : S0/REJ -> 4 Fail / 5 Refuse, SF -> 1 Open, else 6 Traffic
+    # ssl   : pure telemetry observation -> 6 Traffic
+    # dns   : 1 Query, 2 Response (answers present)
+    # http  : mapped from request method
+    conn_activity_id = if conn_state == "S0" { 4 } else if conn_state == "REJ" { 5 } else if conn_state == "SF" { 1 } else { 6 }
+    network_activity_id = if log_path == "conn" { conn_activity_id } else { 6 }
+    dns_activity_id = if has_answers { 2 } else { 1 }
+    http_activity_id = if method_upper == "GET" { 3 } else if method_upper == "POST" { 6 } else if method_upper == "PUT" { 7 } else if method_upper == "DELETE" { 2 } else if method_upper == "HEAD" { 4 } else if method_upper == "OPTIONS" { 5 } else if method_upper == "PATCH" { 9 } else if method_upper == "CONNECT" { 1 } else if method_upper == "TRACE" { 8 } else { 99 }
+    activity_id = if class_uid == 4003 { dns_activity_id } else if class_uid == 4002 { http_activity_id } else { network_activity_id }
+
+    .class_uid    = class_uid
+    .category_uid = category_uid
+    .severity_id  = if class_uid == 0 { 0 } else { 1 }
+    .activity_id  = activity_id
+    .time         = ts
+
+    .src_endpoint = {
+      "ip":   src_ip,
+      "port": src_port
+    }
+
+    .dst_endpoint = {
+      "ip":   dst_ip,
+      "port": dst_port
+    }
+
+    proto = to_string(get(ev, ["proto"]) ?? null) ?? null
+    .connection_info = {
+      "protocol_name": proto
+    }
+
+    # conn (4001) traffic + state
+    orig_bytes_raw = get(ev, ["orig_bytes"]) ?? null
+    resp_bytes_raw = get(ev, ["resp_bytes"]) ?? null
+    bytes_out = if orig_bytes_raw != null { to_int(orig_bytes_raw) ?? null } else { null }
+    bytes_in = if resp_bytes_raw != null { to_int(resp_bytes_raw) ?? null } else { null }
+    duration_raw = get(ev, ["duration"]) ?? null
+    conn_duration = if duration_raw != null { to_float(duration_raw) ?? null } else { null }
+    .traffic = {
+      "bytes_out": bytes_out,
+      "bytes_in":  bytes_in
+    }
+    .duration = conn_duration
+    .status_detail = to_string(get(ev, ["conn_state"]) ?? null) ?? null
+
+    # dns (4003)
+    .query = {
+      "hostname": to_string(get(ev, ["query"]) ?? null) ?? null,
+      "type":     to_string(get(ev, ["qtype_name"]) ?? null) ?? null,
+      "rcode":    to_string(get(ev, ["rcode_name"]) ?? null) ?? null
+    }
+    .answers = dns_answers
+
+    # http (4002)
+    status_code_raw = get(ev, ["status_code"]) ?? null
+    status_code = if status_code_raw != null { to_int(status_code_raw) ?? null } else { null }
+    .http_request = {
+      "http_method": to_string(get(ev, ["method"]) ?? null) ?? null,
+      "url": {
+        "hostname": to_string(get(ev, ["host"]) ?? null) ?? null,
+        "path":     to_string(get(ev, ["uri"]) ?? null) ?? null
+      },
+      "user_agent": to_string(get(ev, ["user_agent"]) ?? null) ?? null
+    }
+    .http_response = {
+      "code": status_code
+    }
+
+    # ssl (4001) — no dedicated TLS index, observation carried in `.tls`
+    .tls = {
+      "sni":               to_string(get(ev, ["server_name"]) ?? null) ?? null,
+      "version":           to_string(get(ev, ["version"]) ?? null) ?? null,
+      "validation_status": to_string(get(ev, ["validation_status"]) ?? null) ?? null
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "Zeek",
+        "vendor_name": "Zeek"
+      },
+      "version": "1.0.0"
+    }
+
+    .unmapped = {
+      "zeek_path": log_path
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  .raw = raw_msg
+  .uid = uuid_v4()
+
+  del(.message)
+  del(.file)
+  del(.host)
+  del(.source_type)
+'''
+
+# --- FILTERS / ROUTES ---
+[transforms.zeek_filter_valid]
+type      = "filter"
+inputs    = ["zeek_parse_and_normalize"]
+condition = '.class_uid != 0'
+
+[transforms.zeek_filter_failed]
+type      = "filter"
+inputs    = ["zeek_parse_and_normalize"]
+condition = '.class_uid == 0'
+
+[transforms.zeek_route_by_class]
+type   = "route"
+inputs = ["zeek_filter_valid"]
+route.network = '.class_uid == 4001'
+route.http    = '.class_uid == 4002'
+route.dns     = '.class_uid == 4003'
+
+[transforms.zeek_raw_failed]
+type   = "remap"
+inputs = ["zeek_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "network/zeek",
+    "parser":        "zeek",
+    "parse_status":  "failed",
+    "parse_error":   "zeek_json_invalid_or_unsupported_path",
+    "raw":           .raw
+  }
+'''
+
+# --- SINKS : Quickwit OCSF ---
+[sinks.zeek_quickwit_network]
+type                = "http"
+inputs              = ["zeek_route_by_class.network"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.zeek_quickwit_network.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.zeek_quickwit_http]
+type                = "http"
+inputs              = ["zeek_route_by_class.http"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-http/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.zeek_quickwit_http.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.zeek_quickwit_dns]
+type                = "http"
+inputs              = ["zeek_route_by_class.dns"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-dns/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.zeek_quickwit_dns.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.zeek_quickwit_raw_failed]
+type                = "http"
+inputs              = ["zeek_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.zeek_quickwit_raw_failed.request]
+headers.Content-Type = "application/x-ndjson"

@@ -1,0 +1,45 @@
+[[tests]]
+name = "Okta — application created (API Activity 6003 → audit)"
+
+[[tests.inputs]]
+insert_at = "okta_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  uuid           = "99990000-1111-2222-3333-444455556666"
+  published      = "2024-04-14T13:45:00.000Z"
+  eventType      = "application.lifecycle.create"
+  severity       = "INFO"
+  displayMessage = "Create application"
+
+  [tests.inputs.log_fields.actor]
+  id          = "00uadmin"
+  type        = "User"
+  alternateId = "admin@corp.com"
+  displayName = "Admin User"
+
+  [tests.inputs.log_fields.outcome]
+  result = "SUCCESS"
+
+[[tests.outputs]]
+extract_from = "okta_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6003)
+  assert_eq!(.category_uid, 6)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.status_id, 1)
+'''
+
+[[tests.outputs]]
+extract_from = "okta_route_by_class.audit"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6003)
+  assert_eq!(.category_uid, 6)
+'''

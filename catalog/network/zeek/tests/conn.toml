@@ -1,0 +1,86 @@
+[[tests]]
+name = "Zeek — conn.log SF routes to ocsf-network (class 4001, activity Open)"
+
+[[tests.inputs]]
+insert_at = "zeek_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"_path":"conn","ts":1713091425.123,"id.orig_h":"10.0.0.5","id.orig_p":54321,"id.resp_h":"1.2.3.4","id.resp_p":443,"proto":"tcp","orig_bytes":1024,"resp_bytes":2048,"conn_state":"SF","duration":1.5}'
+
+[[tests.outputs]]
+extract_from = "zeek_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4001)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.time, 1713091425123)
+  assert_eq!(.src_endpoint.ip, "10.0.0.5")
+  assert_eq!(.src_endpoint.port, 54321)
+  assert_eq!(.dst_endpoint.ip, "1.2.3.4")
+  assert_eq!(.dst_endpoint.port, 443)
+  assert_eq!(.connection_info.protocol_name, "tcp")
+  assert_eq!(.traffic.bytes_out, 1024)
+  assert_eq!(.traffic.bytes_in, 2048)
+  assert_eq!(.status_detail, "SF")
+  assert_eq!(.metadata.product.name, "Zeek")
+  assert_eq!(.metadata.product.vendor_name, "Zeek")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+  assert!(exists(.received_time))
+'''
+
+# Confirm the 4001 event reaches the network route, not http/dns.
+[[tests.outputs]]
+extract_from = "zeek_route_by_class.network"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4001)
+  assert_eq!(.unmapped.zeek_path, "conn")
+'''
+
+[[tests]]
+name = "Zeek — conn.log S0 maps to activity Fail (4)"
+
+[[tests.inputs]]
+insert_at = "zeek_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"_path":"conn","ts":1713091426.0,"id.orig_h":"10.0.0.5","id.orig_p":40000,"id.resp_h":"1.2.3.4","id.resp_p":22,"proto":"tcp","conn_state":"S0"}'
+
+[[tests.outputs]]
+extract_from = "zeek_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4001)
+  assert_eq!(.activity_id, 4)
+'''
+
+[[tests]]
+name = "Zeek — conn.log REJ maps to activity Refuse (5)"
+
+[[tests.inputs]]
+insert_at = "zeek_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"_path":"conn","ts":1713091427.0,"id.orig_h":"10.0.0.5","id.orig_p":40001,"id.resp_h":"1.2.3.4","id.resp_p":3389,"proto":"tcp","conn_state":"REJ"}'
+
+[[tests.outputs]]
+extract_from = "zeek_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4001)
+  assert_eq!(.activity_id, 5)
+'''

@@ -1,0 +1,36 @@
+[[tests]]
+name = "Okta — no eventType, routed to raw-logs as failed"
+
+[[tests.inputs]]
+insert_at = "okta_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  uuid      = "deadbeef-0000-0000-0000-000000000000"
+  published = "2024-04-14T14:00:00.000Z"
+  severity  = "INFO"
+
+[[tests.outputs]]
+extract_from = "okta_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.category_uid, 0)
+  assert!(exists(.raw))
+'''
+
+[[tests.outputs]]
+extract_from = "okta_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "identity/okta")
+  assert_eq!(.parser, "okta")
+  assert_eq!(.parse_error, "okta_event_type_missing")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

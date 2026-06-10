@@ -1,0 +1,36 @@
+[[tests]]
+name = "postfix — connect from client, no envelope fields still classifies"
+
+[[tests.inputs]]
+insert_at = "postfix_parse_and_normalize"
+type      = "log"
+
+  # Real connect line: carries client host/ip but none of the from/to/size
+  # capture groups. The event must still classify as 4009 with the optional
+  # email fields left null instead of aborting.
+  [tests.inputs.log_fields]
+  message  = "smtpd[2010]: connect from mail.example.com[1.2.3.4]"
+  appname  = "postfix/smtpd"
+  hostname = "mail01"
+  procid   = "2010"
+
+[[tests.outputs]]
+extract_from = "postfix_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4009)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.activity_id, 2)
+  assert_eq!(.src_endpoint.hostname, "mail.example.com")
+  assert_eq!(.src_endpoint.ip, "1.2.3.4")
+  assert_eq!(.email.from, null)
+  assert_eq!(.email.to, null)
+  assert_eq!(.email.size, null)
+  assert_eq!(.smtp_status, null)
+  assert_eq!(.relay, null)
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

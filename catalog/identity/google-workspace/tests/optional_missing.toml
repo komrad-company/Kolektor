@@ -1,0 +1,47 @@
+[[tests]]
+name = "Google Workspace — drive activity without ipAddress routes to API Activity"
+
+[[tests.inputs]]
+insert_at = "google_workspace_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  kind = "admin#reports#activity"
+
+  [tests.inputs.log_fields.id]
+  time            = "2024-04-14T11:00:00Z"
+  uniqueQualifier = "-99887"
+  applicationName = "drive"
+  customerId      = "C01"
+
+  [tests.inputs.log_fields.actor]
+  email = "jdoe@corp.com"
+
+  [[tests.inputs.log_fields.events]]
+  type = "access"
+  name = "download"
+
+    [[tests.inputs.log_fields.events.parameters]]
+    name  = "doc_title"
+    value = "Q2 plan"
+
+[[tests.outputs]]
+extract_from = "google_workspace_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 6003)
+  assert_eq!(.category_uid, 6)
+  assert_eq!(.activity_id, 2)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.status, "Success")
+  assert_eq!(.actor.user.email_addr, "jdoe@corp.com")
+  assert_eq!(.actor.user.uid, "")
+  assert_eq!(.src_endpoint.ip, "")
+  assert_eq!(.metadata.product.feature.name, "drive")
+  assert_eq!(.unmapped.application_name, "drive")
+  assert_eq!(.unmapped.event_name, "download")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''
