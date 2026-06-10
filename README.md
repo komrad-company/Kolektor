@@ -36,27 +36,36 @@ kolektor/
 │   ├── template.toml       # Commented empty template (copy for new source)
 │   └── README.md           # Step-by-step contribution guide
 │
-├── catalog/                # All Vector configs by category
-│   ├── network/            # Firewalls, NDR → OCSF 4001 Network Activity
+├── catalog/                # 24 Vector configs by category
+│   ├── network/            # Firewalls, NDR → OCSF 4001/4002/4003
 │   │   ├── opnsense/       #   filterlog CSV via syslog
 │   │   ├── fortinet-fortigate/ # key=value via syslog
-│   │   └── suricata-eve/   #   EVE JSON alert/dns/http/flow
+│   │   ├── suricata-eve/   #   EVE JSON alert/dns/http/flow
+│   │   ├── unbound/        #   query log via syslog → DNS 4003
+│   │   └── zeek/           #   conn/dns/http/ssl JSON via file → 4001/4002/4003
 │   │
-│   ├── endpoint/           # EDR → OCSF 1003 Process / 2001 Finding
-│   │   └── crowdstrike-falcon/ # JSON via SIEM Connector syslog
+│   ├── endpoint/           # EDR / runtime → OCSF 1007 Process / 2001 Finding
+│   │   ├── crowdstrike-falcon/ # JSON via SIEM Connector syslog
+│   │   ├── falco/          #   falcosidekick JSON via HTTP push
+│   │   ├── crowdsec/       #   alert JSON via HTTP push
+│   │   └── microsoft-defender-endpoint/ # Advanced Hunting JSON via HTTP push
 │   │
-│   ├── identity/           # IdP/AD → OCSF 3002 Auth / 3001 Account
+│   ├── identity/           # IdP/AD/SaaS → OCSF 3002 Auth / 3001 Account / 6003 API
 │   │   ├── microsoft-entra/       # Graph signIns/directoryAudits via HTTP push
 │   │   ├── windows-security-evtx/ # Winlogbeat JSON (4624/4625/4688...)
-│   │   └── windows-sysmon/        # Winlogbeat JSON (events 1/3/7/11/22)
+│   │   ├── windows-sysmon/        # Winlogbeat JSON (events 1/3/7/22)
+│   │   ├── okta/                  # System Log API JSON via HTTP push
+│   │   └── google-workspace/      # Reports API JSON via HTTP push
 │   │
 │   ├── linux/              # Native Linux logs
-│   │   ├── syslog/         #   RFC 3164/5424 via syslog TCP → OCSF 6001
-│   │   ├── auditd/         #   audit.log key=value → OCSF 1003/3002
-│   │   └── auth-log/       #   auth.log SSH/sudo/PAM → OCSF 3002
+│   │   ├── syslog/         #   RFC 3164/5424 via syslog TCP → Base Event 0
+│   │   ├── auditd/         #   audit.log key=value → OCSF 1007/3002
+│   │   ├── auth-log/       #   auth.log SSH/sudo/PAM → OCSF 3002
+│   │   └── postfix/        #   maillog via syslog → Email Activity 4009
 │   │
-│   ├── cloud/              # Cloud providers → OCSF 6001 API Activity
+│   ├── cloud/              # Cloud providers → OCSF 6003 API Activity
 │   │   ├── aws-cloudtrail/ # JSON via HTTP
+│   │   ├── kubernetes-audit/ # audit.k8s.io/v1 JSON via file
 │   │   └── microsoft-365-audit/ # Unified Audit JSONL via HTTP push
 │   │
 │   └── web/                # Web servers / edge → OCSF 4002 HTTP Activity
@@ -78,9 +87,9 @@ kolektor/
 catalog/<category>/<source>/
 ├── vector.toml             # Full config: source + VRL transform + sink
 ├── tests/
-│   ├── nominal.toml        # Standard event, all fields present
-│   ├── edge_case.toml      # Optional fields missing or boundary values
-│   └── malformed.toml      # Invalid input → raw-logs with parse_status=failed
+│   ├── nominal.toml          # Standard event, all fields present
+│   ├── optional_missing.toml # Optional fields missing or boundary values
+│   └── malformed.toml        # Invalid input → raw-logs with parse_status=failed
 └── README.md               # Doc: format, source config, OCSF mapping, links
 ```
 
@@ -122,24 +131,25 @@ run catalogue, Vector, and security checks without publishing an image.
 
 | Index            | OCSF class                 | category_uid | Typical sources                    |
 |------------------|----------------------------|--------------|------------------------------------|
-| `ocsf-network`   | 4001 Network Activity      | 4            | opnsense, fortigate, suricata flow |
-| `ocsf-http`      | 4002 HTTP Activity         | 4            | nginx, traefik, cloudflare, suricata HTTP |
-| `ocsf-dns`       | 4003 DNS Activity          | 4            | unbound, sysmon DNS, suricata DNS  |
-| `ocsf-endpoint`  | 1001/1003 File/Process     | 1            | crowdstrike, sysmon, auditd, suricata alerts |
-| `ocsf-identity`  | 3001/3002 Account/Auth     | 3            | entra sign-ins, windows-evtx, auth-log |
-| `ocsf-audit`     | 6001 API Activity          | 6            | cloudtrail, m365 audit, entra directory audits, syslog |
+| `ocsf-network`   | 4001 Network Activity      | 4            | opnsense, fortigate, suricata flow, zeek conn/ssl, postfix (4009 email) |
+| `ocsf-http`      | 4002 HTTP Activity         | 4            | nginx, traefik, cloudflare, suricata/zeek HTTP |
+| `ocsf-dns`       | 4003 DNS Activity          | 4            | unbound, sysmon DNS, suricata/zeek DNS |
+| `ocsf-endpoint`  | 1007 Process / 1005 Module / 2001 Finding | 1/2 | crowdstrike, sysmon, auditd, suricata alerts, falco, crowdsec, defender |
+| `ocsf-identity`  | 3001/3002 Account/Auth     | 3            | entra sign-ins, windows-evtx, auth-log, okta, google-workspace |
+| `ocsf-audit`     | 6003 API Activity          | 6            | cloudtrail, m365 audit, entra/okta/gws admin events |
 | `ocsf-k8s`       | 6003 Kubernetes API Activity | 6          | kubernetes-audit                   |
+| `raw-logs`       | 0 Base Event / parse failures | 0         | syslog (generic), any unparseable event |
 
 ## CI pipeline
 
 | Stage    | Description                                      | Image                     |
 |----------|--------------------------------------------------|---------------------------|
-| catalog  | Validates `catalog/index.json`                   | ubuntu-latest + python    |
-| validate | `vector validate` on each vector.toml            | vector:0.54.0-debian      |
-| test     | `vector test` (config + tests merged)            | vector:0.54.0-debian      |
-| coverage | Enforces >= 3 tests per source                   | vector:0.54.0-debian      |
+| catalog  | `catalog_index.py --check`, `lint_vrl.py`, `validate_ocsf.py` | ubuntu-latest + python    |
+| validate | `vector validate` on each vector.toml            | vector:0.55.0-debian      |
+| test     | `vector test` (config + tests merged)            | vector:0.55.0-debian      |
+| coverage | Enforces >= 3 tests per source                   | vector:0.55.0-debian      |
 | report   | Generates markdown report as artifact            | ubuntu-latest + python    |
-| publish  | reusable Docker publish workflow -> ghcr.io (main only) | ubuntu-latest             |
+| publish  | buildah OCI build → ghcr.io (container-pipeline) | komrad-runners            |
 
 ## Contributing
 
