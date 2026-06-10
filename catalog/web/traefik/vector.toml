@@ -56,9 +56,14 @@ source = '''
     referrer_value = if referer != null && referer != "-" && referer != "" { referer } else { null }
     actor_name = if client_user != null && client_user != "-" && client_user != "" { client_user } else { null }
 
+    # OCSF 4002 activity_id depuis la methode HTTP (pre-calcule : pas de if dans un object literal)
+    method_upper = if method != null { upcase(method) ?? "" } else { "" }
+    activity_id = if method_upper == "GET" { 3 } else if method_upper == "POST" { 6 } else if method_upper == "PUT" { 7 } else if method_upper == "DELETE" { 2 } else if method_upper == "HEAD" { 4 } else if method_upper == "OPTIONS" { 5 } else if method_upper == "PATCH" { 9 } else if method_upper == "CONNECT" { 1 } else if method_upper == "TRACE" { 8 } else { 99 }
+
     .class_uid    = 4002
     .category_uid = 4
     .severity_id  = ocsf_severity
+    .activity_id  = activity_id
     .time         = ts
 
     .http_request = {

@@ -16,6 +16,7 @@ type   = "vrl"
 source = '''
   assert_eq!(.class_uid, 4002)
   assert_eq!(.category_uid, 4)
+  assert_eq!(.activity_id, 3)
   assert_eq!(.http_request.http_method, "GET")
   assert_eq!(.http_request.url.hostname, "example.com")
   assert_eq!(.http_request.url.path, "/index.html")

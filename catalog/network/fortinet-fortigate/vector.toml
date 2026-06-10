@@ -54,6 +54,15 @@ source = '''
     }
     ocsf_action_id = if ocsf_action == "Allow" { 1 } else if ocsf_action == "Deny" { 2 } else if ocsf_action == "Close" { 3 } else { 0 }
 
+    # OCSF 4001 activity_id (D6): {1 Open, 2 Close, 3 Reset, 4 Fail, 5 Refuse,
+    # 6 Traffic, 7 Listen, 99 Other}. FortiGate traffic logs describe a flow →
+    # 6 (Traffic); a teardown (deny/drop/blocked/close/timeout) → 2 (Close).
+    ocsf_activity_id = if fgt_action == "deny" || fgt_action == "drop" || fgt_action == "blocked" || fgt_action == "close" || fgt_action == "timeout" {
+      2
+    } else {
+      6
+    }
+
     # Severity mapping : emergency/alert/critical → 5, error → 4, warning → 3, notice → 2, info → 1
     ocsf_severity = if fgt_level == "emergency" || fgt_level == "alert" || fgt_level == "critical" {
       5
@@ -70,6 +79,7 @@ source = '''
     .class_uid    = 4001
     .category_uid = 4
     .severity_id  = ocsf_severity
+    .activity_id  = ocsf_activity_id
     .action       = ocsf_action
     .action_id    = ocsf_action_id
 

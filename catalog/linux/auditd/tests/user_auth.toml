@@ -17,6 +17,8 @@ source = '''
   assert_eq!(.class_uid, 3002)
   assert_eq!(.category_uid, 3)
   assert_eq!(.severity_id, 1)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.activity_name, "Logon")
   assert_eq!(.unmapped.audit_type, "USER_AUTH")
   assert!(exists(.raw))
 '''

@@ -26,6 +26,7 @@ extract_from = "microsoft_entra_parse_and_normalize"
 type   = "vrl"
 source = '''
   assert_eq!(.class_uid, 3002)
+  assert_eq!(.activity_id, 1)
   assert_eq!(.severity_id, 3)
   assert_eq!(.status, "Failure")
   assert_eq!(.status_id, 2)

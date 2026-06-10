@@ -5,7 +5,7 @@ ocsf_outputs:
     category_uid: 2
     index: ocsf-endpoint
     route: endpoint
-  - class_uid: 1003
+  - class_uid: 1007
     category_uid: 1
     index: ocsf-endpoint
     route: endpoint

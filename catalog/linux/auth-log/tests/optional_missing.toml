@@ -1,0 +1,31 @@
+[[tests]]
+name = "auth-log — pam_unix session open without ssh/sudo fields still classifies"
+
+[[tests.inputs]]
+insert_at = "authlog_parse_and_normalize"
+type      = "log"
+
+  # Real PAM line emitted on session open: matches is_pam, but carries none
+  # of the SSH/sudo capture groups. The event must still classify as 3002
+  # with the optional actor/endpoint fields left null instead of aborting.
+  [tests.inputs.log_fields]
+  message  = "pam_unix(sudo:session): session opened for user root(uid=0) by deploy(uid=1000)"
+  appname  = "sudo"
+  hostname = "db01"
+  procid   = "5678"
+
+[[tests.outputs]]
+extract_from = "authlog_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3002)
+  assert_eq!(.category_uid, 3)
+  assert!(exists(.activity_id))
+  assert_eq!(.src_endpoint.ip, null)
+  assert_eq!(.src_endpoint.port, null)
+  assert_eq!(.auth_protocol, null)
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

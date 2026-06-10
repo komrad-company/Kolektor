@@ -1,5 +1,5 @@
 [[tests]]
-name = "Windows Security — 4624 Successful Logon (interactive)"
+name = "Windows Security — 4624 with optional fields missing (no SID, no IP, no process)"
 
 [[tests.inputs]]
 insert_at = "winevtx_parse_and_normalize"
@@ -16,13 +16,9 @@ type      = "log"
     [tests.inputs.log_fields.winlog.event_data]
     TargetUserName    = "jdoe"
     TargetDomainName  = "CORP"
-    TargetUserSid     = "S-1-5-21-123456-7890-1234567890-1001"
     SubjectUserName   = "SYSTEM"
     SubjectDomainName = "NT AUTHORITY"
-    LogonType         = "2"
-    IpAddress         = "10.0.0.50"
-    IpPort            = "49152"
-    LogonProcessName  = "User32"
+    LogonType         = "5"
 
 [[tests.outputs]]
 extract_from = "winevtx_parse_and_normalize"
@@ -31,15 +27,12 @@ extract_from = "winevtx_parse_and_normalize"
 type   = "vrl"
 source = '''
   assert_eq!(.class_uid, 3002)
-  assert_eq!(.category_uid, 3)
   assert_eq!(.activity_id, 1)
-  assert_eq!(.severity_id, 1)
-  assert_eq!(.status, "Success")
-  assert_eq!(.status_id, 1)
   assert_eq!(.user.name, "jdoe")
-  assert_eq!(.user.domain, "CORP")
-  assert_eq!(.user.uid, "S-1-5-21-123456-7890-1234567890-1001")
-  assert_eq!(.src_endpoint.ip, "10.0.0.50")
+  # Dead-cast fix: a missing SID resolves to null, not "" — both branches absent.
+  assert_eq!(.user.uid, null)
+  # No NewProcessName / ProcessName present -> process.name is null, not "".
+  assert_eq!(.process.name, null)
   assert_eq!(.unmapped.event_id, 4624)
-  assert_eq!(.unmapped.logon_type, 2)
+  assert_eq!(.logon_type_id, 5)
 '''

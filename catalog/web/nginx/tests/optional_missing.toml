@@ -1,0 +1,20 @@
+[[tests]]
+name = "nginx — non-standard method maps activity_id to Other (99)"
+
+[[tests.inputs]]
+insert_at = "nginx_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '10.0.0.9 - - [14/Apr/2024:12:00:00 +0000] "PROPFIND /webdav/ HTTP/1.1" 207 512 "-" "Microsoft-WebDAV-MiniRedir/10.0.19044"'
+
+[[tests.outputs]]
+extract_from = "nginx_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4002)
+  assert_eq!(.http_request.http_method, "PROPFIND")
+  assert_eq!(.activity_id, 99)
+'''

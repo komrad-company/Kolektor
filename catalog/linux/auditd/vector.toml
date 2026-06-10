@@ -1,6 +1,6 @@
 # ==============================================================================
 # Linux auditd — SYSCALL, EXECVE, PROCTITLE, USER_AUTH, USER_LOGIN
-# OCSF Class : 1003 (Process Activity) + 3002 (Authentication)
+# OCSF Class : 1007 (Process Activity) + 3002 (Authentication)
 # Input      : Syslog TCP (rsyslog forwarde /var/log/audit/audit.log via imfile)
 # Tested with: auditd 3.0+, Linux 5.x/6.x
 # rsyslog   : imfile /var/log/audit/audit.log -> omfwd target port LISTEN_PORT TCP
@@ -54,8 +54,12 @@ source = '''
   is_auth = audit_type == "USER_AUTH" || audit_type == "USER_LOGIN" || audit_type == "CRED_ACQ" || audit_type == "USER_ACCT"
   is_process = audit_type == "SYSCALL" || audit_type == "EXECVE" || audit_type == "PROCTITLE"
   valid = is_auth || is_process
-  class_uid = if is_auth { 3002 } else { 1003 }
+  class_uid = if is_auth { 3002 } else { 1007 }
   category_uid = if is_auth { 3 } else { 1 }
+
+  # activity_id : auth (3002) → 1 Logon ; process (1007) → 1 Launch
+  activity = if is_auth { "Logon" } else { "Launch" }
+  activity_id = if is_auth { 1 } else { 1 }
 
   # Severity : SYSCALL success=yes → info, success=no → medium
   success = pairs.success
@@ -63,9 +67,11 @@ source = '''
   ocsf_severity = if success == "no" || res == "failed" { 3 } else { 1 }
 
   if valid {
-    .class_uid    = class_uid
-    .category_uid = category_uid
-    .severity_id  = ocsf_severity
+    .class_uid     = class_uid
+    .category_uid  = category_uid
+    .severity_id   = ocsf_severity
+    .activity_name = activity
+    .activity_id   = activity_id
   } else {
     .class_uid    = 0
     .category_uid = 0
@@ -145,19 +151,19 @@ source = '''
 [transforms.auditd_filter_valid]
 type      = "filter"
 inputs    = ["auditd_parse_and_normalize"]
-condition = '.class_uid == 1003 || .class_uid == 3002'
+condition = '.class_uid == 1007 || .class_uid == 3002'
 
-# --- ROUTE : dispatch by class_uid (3002 USER_AUTH → identity, 1003 SYSCALL → endpoint) ---
+# --- ROUTE : dispatch by class_uid (3002 USER_AUTH → identity, 1007 SYSCALL → endpoint) ---
 [transforms.auditd_route_by_class]
 type   = "route"
 inputs = ["auditd_filter_valid"]
 route.identity = '.class_uid == 3002'
-route.endpoint = '.class_uid == 1001 || .class_uid == 1003'
+route.endpoint = '.class_uid == 1001 || .class_uid == 1007'
 
 [transforms.auditd_filter_failed]
 type      = "filter"
 inputs    = ["auditd_parse_and_normalize"]
-condition = '.class_uid != 1003 && .class_uid != 3002'
+condition = '.class_uid != 1007 && .class_uid != 3002'
 
 # --- TRANSFORM : extract failures for raw-logs ---
 [transforms.auditd_raw_only]

@@ -59,7 +59,17 @@ source = '''
 
     class_uid = if !valid { 0 } else if event_type == "alert" { 2001 } else if event_type == "dns" { 4003 } else if event_type == "http" { 4002 } else { 4001 }
     category_uid = if class_uid == 2001 { 2 } else if class_uid == 0 { 0 } else { 4 }
-    activity_id = if event_type == "dns" { 1 } else if event_type == "http" { 1 } else if event_type == "alert" { 1 } else { 1 }
+
+    # activity_id per OCSF class (pre-computed: no if in object literal).
+    # DNS 4003   : query->1, answer/response->2 (Suricata dns.type)
+    # HTTP 4002  : mapped from http.http_method
+    # Net 4001   : flow/netflow/tls observations -> 6 (Traffic)
+    # Finding 2001: a Suricata alert is a generated finding -> 1 (Generate)
+    dns_type = downcase(to_string(get(dns, ["type"]) ?? "") ?? "")
+    method_upper = upcase(to_string(get(http, ["http_method"]) ?? "") ?? "")
+    http_activity_id = if method_upper == "GET" { 3 } else if method_upper == "POST" { 6 } else if method_upper == "PUT" { 7 } else if method_upper == "DELETE" { 2 } else if method_upper == "HEAD" { 4 } else if method_upper == "OPTIONS" { 5 } else if method_upper == "PATCH" { 9 } else if method_upper == "CONNECT" { 1 } else if method_upper == "TRACE" { 8 } else { 99 }
+    dns_activity_id = if dns_type == "query" { 1 } else if dns_type == "answer" || dns_type == "response" { 2 } else { 99 }
+    activity_id = if class_uid == 4003 { dns_activity_id } else if class_uid == 4002 { http_activity_id } else if class_uid == 4001 { 6 } else if class_uid == 2001 { 1 } else { 0 }
 
     .class_uid    = class_uid
     .category_uid = category_uid

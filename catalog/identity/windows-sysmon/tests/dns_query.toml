@@ -7,13 +7,17 @@ type      = "log"
 
   [tests.inputs.log_fields]
   message = ""
-  timestamp = "2024-04-14T10:35:00.000Z"
+  "@timestamp" = "2024-04-14T10:35:00.000Z"
+
+  [tests.inputs.log_fields.agent]
+  type = "winlogbeat"
 
   [tests.inputs.log_fields.winlog]
   event_id      = 22
   computer_name = "WS01.corp.local"
 
     [tests.inputs.log_fields.winlog.event_data]
+    UtcTime      = "2024-04-14 10:35:00.000"
     User         = "CORP\\jdoe"
     ProcessId    = "4567"
     Image        = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
@@ -28,14 +32,21 @@ type   = "vrl"
 source = '''
   assert_eq!(.class_uid, 4003)
   assert_eq!(.category_uid, 4)
+  assert_eq!(.activity_id, 1)
   assert_eq!(.query.hostname, "malware-c2.evil.com")
   assert_eq!(.query.type, "5")
   assert_eq!(.unmapped.query_results, "type:  5 c2-server.evil.com;::ffff:93.184.216.34;")
   assert_eq!(.unmapped.event_id, 22)
+  # Process/network substructures must not be attached to a DNS event.
+  assert!(!exists(.process))
+  assert!(!exists(.actor))
+  assert!(!exists(.src_endpoint))
+  assert!(!exists(.dst_endpoint))
+  assert!(!exists(.file))
 '''
 
 [[tests]]
-name = "Sysmon — Event 11 File Created"
+name = "Sysmon — Event 22 DNS Query (optional QueryResults missing)"
 
 [[tests.inputs]]
 insert_at = "sysmon_parse_and_normalize"
@@ -43,17 +54,17 @@ type      = "log"
 
   [tests.inputs.log_fields]
   message = ""
-  timestamp = "2024-04-14T10:40:00.000Z"
+  "@timestamp" = "2024-04-14T10:36:00.000Z"
 
   [tests.inputs.log_fields.winlog]
-  event_id      = 11
+  event_id      = 22
   computer_name = "WS01.corp.local"
 
     [tests.inputs.log_fields.winlog.event_data]
-    User           = "CORP\\jdoe"
-    ProcessId      = "4567"
-    Image          = "C:\\Windows\\System32\\cmd.exe"
-    TargetFilename = "C:\\Users\\jdoe\\AppData\\Local\\Temp\\payload.exe"
+    UtcTime   = "2024-04-14 10:36:00.000"
+    ProcessId = "4567"
+    Image     = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
+    QueryName = "example.com"
 
 [[tests.outputs]]
 extract_from = "sysmon_parse_and_normalize"
@@ -61,8 +72,10 @@ extract_from = "sysmon_parse_and_normalize"
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  assert_eq!(.class_uid, 1001)
-  assert_eq!(.category_uid, 1)
-  assert_eq!(.file.name, "C:\\Users\\jdoe\\AppData\\Local\\Temp\\payload.exe")
-  assert_eq!(.unmapped.event_id, 11)
+  assert_eq!(.class_uid, 4003)
+  assert_eq!(.query.hostname, "example.com")
+  # QueryResults absent → no type regex match, query.type stays null.
+  assert_eq!(.query.type, null)
+  # to_string(null) is "", so the unmapped passthrough is the empty string.
+  assert_eq!(.unmapped.query_results, "")
 '''

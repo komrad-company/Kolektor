@@ -1,6 +1,8 @@
 # ==============================================================================
 # Linux Syslog — RFC 3164 / RFC 5424
-# OCSF Class : 6001 (API Activity) — generic system event
+# OCSF Class : 0 (Base Event) — a generic syslog line carries no intrinsic
+#              OCSF activity (decree D2). Fallback parser: app-specific parsers
+#              (auth-log, service parsers) are preferred when the source is known.
 # Input      : Syslog TCP/UDP
 # Tested with: rsyslog, syslog-ng, systemd-journald
 # ==============================================================================
@@ -35,32 +37,16 @@ source = '''
   }
   ocsf_severity = if sev <= 2 { 5 } else if sev <= 3 { 4 } else if sev <= 4 { 3 } else if sev <= 5 { 2 } else { 1 }
 
-  appname = .appname
-  hostname = .hostname
   facility = .facility
   procid_val = .procid
-  procid_int = if procid_val != null { to_int(procid_val) ?? null } else { null }
 
-  .class_uid    = 6001
-  .category_uid = 6
+  # Decree D2: a generic syslog line carries no intrinsic OCSF activity.
+  # Emit a Base Event (class 0 / category 0) — no activity_id on Base Event.
+  .class_uid    = 0
+  .category_uid = 0
   .severity_id  = ocsf_severity
   .time         = to_unix_timestamp(.timestamp, unit: "milliseconds") ?? to_unix_timestamp(now(), unit: "milliseconds")
-
-  .api = {
-    "operation": appname,
-    "service": { "name": "syslog" }
-  }
-
-  .actor = {
-    "process": {
-      "name": appname,
-      "pid":  procid_int
-    }
-  }
-
-  .src_endpoint = {
-    "hostname": hostname
-  }
+  .parse_status = "parsed"
 
   .metadata = {
     "product": {
@@ -95,12 +81,12 @@ source = '''
 [transforms.syslog_filter_valid]
 type      = "filter"
 inputs    = ["syslog_parse_and_normalize"]
-condition = '.class_uid == 6001 && .raw != null && .raw != ""'
+condition = '.parse_status == "parsed" && .raw != null && .raw != ""'
 
 [transforms.syslog_filter_failed]
 type      = "filter"
 inputs    = ["syslog_parse_and_normalize"]
-condition = '.class_uid != 6001 || .raw == null || .raw == ""'
+condition = '.parse_status != "parsed" || .raw == null || .raw == ""'
 
 # --- TRANSFORM : extract failures for raw-logs ---
 [transforms.syslog_raw_only]
@@ -133,11 +119,11 @@ source = '''
   }
 '''
 
-# --- SINK : Quickwit OCSF ---
+# --- SINK : Quickwit raw-logs (parsed Base Event — decree D2) ---
 [sinks.syslog_quickwit]
 type                = "http"
 inputs              = ["syslog_filter_valid"]
-uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-audit/ingest"
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
 encoding.codec      = "json"
 framing.method      = "newline_delimited"
 batch.max_events    = 1000

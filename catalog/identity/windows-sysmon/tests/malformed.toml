@@ -1,23 +1,67 @@
 [[tests]]
-name = "Sysmon — malformed (winlog absent)"
+name = "Sysmon — NXLog top-level fallback (no .winlog envelope)"
 
+# Proves the if/else fallback fires for NXLog payloads: event_id and
+# computer live at the top level, not under .winlog. A `to_int(.winlog.event_id)
+# ?? to_int(.event_id)` chain would be dead here (to_int(null)=0) and misroute
+# this real event to raw-logs — the if/else must read .event_id instead.
 [[tests.inputs]]
 insert_at = "sysmon_parse_and_normalize"
 type      = "log"
 
   [tests.inputs.log_fields]
-  message   = "pas du Winlogbeat"
-  timestamp = "2024-04-14T10:23:45.000Z"
+  message       = ""
+  event_id      = 1
+  computer_name = "NXBOX.corp.local"
 
-# Sans .winlog.event_id, .unmapped.event_id == 0 → filter_valid drop
+  [tests.inputs.log_fields.event_data]
+  UtcTime     = "2024-04-14 11:00:00.000"
+  User        = "CORP\\svc"
+  ProcessId   = "9001"
+  Image       = "C:\\Windows\\System32\\cmd.exe"
+  CommandLine = "cmd.exe /c whoami"
+  Hashes      = "MD5=00112233445566778899AABBCCDDEEFF,SHA256=CAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABE"
+
 [[tests.outputs]]
 extract_from = "sysmon_parse_and_normalize"
 
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  assert_eq!(.unmapped.event_id, 0)
+  # NXLog event is correctly classified, NOT dropped to raw-logs.
+  assert_eq!(.class_uid, 1007)
+  assert_eq!(.category_uid, 1)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.process.name, "C:\\Windows\\System32\\cmd.exe")
+  assert_eq!(.process.pid, 9001)
+  # SHA256 extracted even when it is not the first token in Hashes.
+  assert_eq!(.process.file.hashes[0].value, "CAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABE")
+  assert_eq!(.actor.user.name, "CORP\\svc")
+  assert_eq!(.unmapped.event_id, 1)
+'''
+
+[[tests]]
+name = "Sysmon — malformed (no Sysmon envelope at all)"
+
+[[tests.inputs]]
+insert_at = "sysmon_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = "this is not a Sysmon event"
+  timestamp = "2024-04-14T10:23:45.000Z"
+
+[[tests.outputs]]
+extract_from = "sysmon_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  # No event_id anywhere → unsupported → class_uid 0, dropped to raw-logs.
+  # Intentionally NOT asserting a specific .unmapped.event_id value: the
+  # old test pinned it to the dead-fallback artifact (0).
   assert_eq!(.class_uid, 0)
+  assert_eq!(.category_uid, 0)
 '''
 
 [[tests.outputs]]

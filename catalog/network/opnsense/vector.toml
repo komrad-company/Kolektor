@@ -71,9 +71,15 @@ source = '''
     ocsf_action_id = if action_raw == "pass" { 1 } else { 2 }
     ocsf_severity = if action_raw == "pass" { 1 } else { 2 }
 
+    # OCSF 4001 activity_id (D6): {1 Open, 2 Close, 3 Reset, 4 Fail, 5 Refuse,
+    # 6 Traffic, 7 Listen, 99 Other}. A filterlog line (pass or block) records
+    # an observed packet/flow → 6 (Traffic).
+    ocsf_activity_id = 6
+
     .class_uid    = 4001
     .category_uid = 4
     .severity_id  = ocsf_severity
+    .activity_id  = ocsf_activity_id
     .time         = to_unix_timestamp(.timestamp, unit: "milliseconds") ?? to_unix_timestamp(now(), unit: "milliseconds")
     .action       = ocsf_action
     .action_id    = ocsf_action_id

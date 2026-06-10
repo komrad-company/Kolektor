@@ -5,7 +5,7 @@ ocsf_outputs:
     category_uid: 3
     index: ocsf-identity
     route: identity
-  - class_uid: 6001
+  - class_uid: 6003
     category_uid: 6
     index: ocsf-audit
     route: audit

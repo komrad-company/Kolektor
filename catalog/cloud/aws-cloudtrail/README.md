@@ -2,7 +2,7 @@
 
 ## Description
 Collecte les logs CloudTrail AWS (JSON).
-Normalise en OCSF classe 6001 (API Activity).
+Normalise en OCSF classe 6003 (API Activity).
 
 ## Format attendu
 ```json
@@ -37,7 +37,7 @@ Si les logs sont telecharges/synchronises localement.
 ## Mapping OCSF
 | CloudTrail        | OCSF                      |
 |-------------------|---------------------------|
-| eventName         | api.operation             |
+| eventName         | api.operation, activity_id (verb) |
 | eventSource       | api.service.name          |
 | sourceIPAddress   | src_endpoint.ip           |
 | userIdentity      | actor.user.*              |

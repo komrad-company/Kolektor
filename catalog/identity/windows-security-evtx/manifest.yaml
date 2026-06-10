@@ -9,8 +9,8 @@ ocsf_outputs:
     category_uid: 3
     index: ocsf-identity
     route: identity
-  - class_uid: 1003
+  - class_uid: 1007
     category_uid: 1
     index: ocsf-endpoint
     route: endpoint
-version: 0.1.0
+version: 0.2.0

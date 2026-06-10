@@ -1,0 +1,30 @@
+[[tests]]
+name = "auditd — EXECVE without pid/comm still classifies as Process Activity"
+
+[[tests.inputs]]
+insert_at = "auditd_parse_and_normalize"
+type      = "log"
+
+  # Real EXECVE record: carries argc/argv only, no pid/comm/auid/uid.
+  # The process event must still classify (1007/Launch) with the optional
+  # actor fields left null rather than aborting the transform.
+  [tests.inputs.log_fields]
+  message = 'type=EXECVE msg=audit(1713091425.123:456): argc=3 a0="ls" a1="-la" a2="/etc"'
+
+[[tests.outputs]]
+extract_from = "auditd_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 1007)
+  assert_eq!(.category_uid, 1)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.activity_name, "Launch")
+  assert_eq!(.actor.process.pid, null)
+  assert_eq!(.actor.process.name, null)
+  assert_eq!(.actor.user.uid, null)
+  assert_eq!(.unmapped.audit_type, "EXECVE")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''
