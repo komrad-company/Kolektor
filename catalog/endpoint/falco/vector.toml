@@ -1,0 +1,175 @@
+# ==============================================================================
+# Falco — runtime security alerts (JSON over HTTP, via falcosidekick)
+# OCSF Class : 2001 (Security Finding)
+# Input      : HTTP (JSON)
+# Tested with: Falco JSON output, falcosidekick HTTP output
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.falco_input]
+type     = "http_server"
+address  = "0.0.0.0:${LISTEN_PORT:-8519}"
+encoding = "json"
+
+# --- TRANSFORM : parse + normalisation OCSF ---
+[transforms.falco_parse_and_normalize]
+type   = "remap"
+inputs = ["falco_input"]
+source = '''
+  raw_msg = encode_json(.)
+
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  # Falco JSON structure :
+  # output, priority, rule, time, output_fields{...}, source, tags[], hostname
+  # to_string() sans `!` : retourne null sur champ absent au lieu de panic.
+  rule_name = to_string(.rule) ?? ""
+  valid = rule_name != ""
+
+  if valid {
+    # Timestamp : RFC3339 nanoseconds (e.g. 2024-04-14T10:23:45.123456789Z).
+    # to_unix_timestamp! on null aborts, so pre-compute and guard with a null check.
+    ts_str = to_string(.time) ?? ""
+    parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
+    ts = to_unix_timestamp(now(), unit: "milliseconds")
+    if parsed_ts != null {
+      ts = to_unix_timestamp!(parsed_ts, unit: "milliseconds")
+    }
+
+    # severity_id from the Falco priority (D6 enum).
+    # Pre-computed: never put an `if` inside an object literal.
+    priority = downcase(to_string(.priority) ?? "")
+    severity_id = 1
+    if priority == "emergency" || priority == "alert" || priority == "critical" {
+      severity_id = 5
+    } else if priority == "error" {
+      severity_id = 4
+    } else if priority == "warning" {
+      severity_id = 3
+    } else if priority == "notice" {
+      severity_id = 2
+    } else if priority == "informational" || priority == "info" || priority == "debug" {
+      severity_id = 1
+    }
+
+    # Security Finding (2001) — D6 defines no stable activity_id enum for this
+    # class; 1 (Generate) is the only lifecycle value that fits a fired alert.
+    activity_id = 1
+
+    # Falco tags -> finding_info.types (array of strings).
+    finding_types = array(.tags) ?? []
+
+    # output_fields : raw runtime context returned by Falco.
+    output_fields = object(.output_fields) ?? {}
+
+    # to_string(null)="" is infallible, so the ?? null fallback is dead on a
+    # missing field. Guard explicitly so an absent hostname stays null.
+    hostname = if .hostname != null { to_string(.hostname) ?? null } else { null }
+    output_desc = if .output != null { to_string(.output) ?? null } else { null }
+    priority_raw = if .priority != null { to_string(.priority) ?? null } else { null }
+    source_raw = if .source != null { to_string(.source) ?? null } else { null }
+
+    .class_uid    = 2001
+    .category_uid = 2
+    .activity_id  = activity_id
+    .severity_id  = severity_id
+    .time         = ts
+
+    .finding_info = {
+      "title":   rule_name,
+      "types":   finding_types,
+      "desc":    output_desc
+    }
+
+    .src_endpoint = {
+      "hostname": hostname
+    }
+
+    .metadata = {
+      "product": {
+        "name":        "Falco",
+        "vendor_name": "Falcosecurity"
+      },
+      "version": "1.0.0"
+    }
+
+    .unmapped = {
+      "priority":      priority_raw,
+      "source":        source_raw,
+      "output_fields": output_fields
+    }
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+    .time         = to_unix_timestamp(now(), unit: "milliseconds")
+  }
+
+  .raw = raw_msg
+  .uid = uuid_v4()
+  del(.output)
+  del(.priority)
+  del(.rule)
+  del(.output_fields)
+  del(.source)
+  del(.tags)
+  del(.hostname)
+  del(.source_type)
+'''
+
+# --- FILTER ---
+[transforms.falco_filter_valid]
+type      = "filter"
+inputs    = ["falco_parse_and_normalize"]
+condition = '.class_uid == 2001'
+
+[transforms.falco_filter_failed]
+type      = "filter"
+inputs    = ["falco_parse_and_normalize"]
+condition = '.class_uid != 2001'
+
+[transforms.falco_raw_failed]
+type   = "remap"
+inputs = ["falco_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "endpoint/falco",
+    "parser":        "falco",
+    "parse_status":  "failed",
+    "parse_error":   "falco_rule_missing",
+    "raw":           .raw
+  }
+'''
+
+# --- SINK : Quickwit ocsf-endpoint ---
+[sinks.falco_quickwit]
+type                = "http"
+inputs              = ["falco_filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-endpoint/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.falco_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs (echecs de parsing uniquement) ---
+[sinks.falco_quickwit_raw_failed]
+type                = "http"
+inputs              = ["falco_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.falco_quickwit_raw_failed.request]
+headers.Content-Type = "application/x-ndjson"

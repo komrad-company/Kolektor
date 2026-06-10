@@ -1,0 +1,197 @@
+# ==============================================================================
+# Postfix maillog — SMTP delivery, queue, reject events
+# OCSF Class : 4009 (Email Activity)
+# Input      : Syslog TCP (rsyslog forwards mail facility)
+# Tested with: Postfix 3.x, Ubuntu/Debian
+# rsyslog   : mail.* -> omfwd target port LISTEN_PORT protocol TCP
+# Routing   : OCSF 4009 has no dedicated email index — routed to ocsf-network.
+# ==============================================================================
+
+# --- SOURCE ---
+[sources.postfix_input]
+type    = "syslog"
+address = "0.0.0.0:${LISTEN_PORT:-5146}"
+mode    = "tcp"
+
+# --- TRANSFORM : parse + OCSF normalization ---
+[transforms.postfix_parse_and_normalize]
+type   = "remap"
+inputs = ["postfix_input"]
+source = '''
+  .tenant_id     = "${TENANT_ID}"
+  .datasource_id = "${DATASOURCE_ID}"
+  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+
+  # Vector syslog source parses the header and provides:
+  # .hostname, .appname, .procid, .timestamp, .message (message body only)
+  hostname = string(.hostname) ?? ""
+  app      = string(.appname) ?? ""
+  pid_raw  = .procid
+  msg      = string!(.message)
+  raw_msg  = msg
+
+  # Postfix subprograms log via a "subprog[pid]:" prefix that the syslog
+  # source keeps in the body. Strip it so the regexes match the payload.
+  body = replace(msg, r'^\w+\[\d+\]:\s*', "")
+
+  # --- Event-type detection on the message body ---
+  is_connect = match(body, r'^connect from ')
+  is_reject  = match(body, r'reject:')
+  is_qmgr    = match(body, r'from=<[^>]*>,\s*size=')
+  is_smtp    = match(body, r'\bto=<[^>]*>') && match(body, r'\bstatus=')
+  valid = is_connect || is_reject || is_qmgr || is_smtp
+
+  # connect: "connect from mail.example.com[1.2.3.4]"
+  connect_match = parse_regex(body, r'connect from (?P<client_host>[^\[\s]+)\[(?P<client_ip>[0-9a-fA-F:.]+)\]') ?? {}
+
+  # qmgr from line: "A1B2C3: from=<sender@example.com>, size=1024, nrcpt=1 (queue active)"
+  qmgr_match = parse_regex(body, r'from=<(?P<from>[^>]*)>,\s*size=(?P<size>\d+)') ?? {}
+
+  # smtp delivery: "A1B2C3: to=<rcpt@example.org>, relay=mx.example.org[5.6.7.8]:25, delay=0.5, status=sent (250 2.0.0 OK)"
+  smtp_match = parse_regex(body, r'to=<(?P<to>[^>]*)>(?:,\s*relay=(?P<relay>[^,\s]+))?.*?status=(?P<status>\w+)') ?? {}
+
+  # reject: "NOQUEUE: reject: RCPT from unknown[9.9.9.9]: 554 5.7.1 Service unavailable; from=<x@y.com> to=<z@w.com>"
+  reject_client = parse_regex(body, r'reject:\s+\w+\s+from\s+(?P<client_host>[^\[\s]+)\[(?P<client_ip>[0-9a-fA-F:.]+)\]') ?? {}
+  reject_from   = parse_regex(body, r'from=<(?P<from>[^>]*)>') ?? {}
+  reject_to     = parse_regex(body, r'to=<(?P<to>[^>]*)>') ?? {}
+
+  # --- Field extraction (explicit cascade — `??` only falls back on errors,
+  # not on null returned by an unmatched regex capture) ---
+  email_from = if qmgr_match.from != null { qmgr_match.from } else if reject_from.from != null { reject_from.from } else { null }
+  email_to   = if smtp_match.to != null { smtp_match.to } else if reject_to.to != null { reject_to.to } else { null }
+  email_size_raw = qmgr_match.size
+  email_size = if email_size_raw != null { to_int(email_size_raw) ?? null } else { null }
+  smtp_status = if smtp_match.status != null { smtp_match.status } else { null }
+  relay_host  = if smtp_match.relay != null { smtp_match.relay } else { null }
+  client_host = if connect_match.client_host != null { connect_match.client_host } else if reject_client.client_host != null { reject_client.client_host } else { null }
+  client_ip   = if connect_match.client_ip != null { connect_match.client_ip } else if reject_client.client_ip != null { reject_client.client_ip } else { null }
+
+  # --- Severity & activity ---
+  # reject/bounce → Medium (3), deferred → Low (2), sent/connect → Info (1).
+  is_deferred = smtp_status == "deferred"
+  is_bounced  = smtp_status == "bounced"
+  ocsf_severity = if is_reject || is_bounced { 3 } else if is_deferred { 2 } else { 1 }
+
+  # OCSF 4009 (Email Activity) has no activity_id entry in the validator enum
+  # table — pick sensible integers: send/sent=1, receive/connect=2, reject=99.
+  activity_id = if is_reject { 99 } else if is_connect { 2 } else { 1 }
+
+  if valid {
+    .class_uid    = 4009
+    .category_uid = 4
+    .severity_id  = ocsf_severity
+    .activity_id  = activity_id
+  } else {
+    .class_uid    = 0
+    .category_uid = 0
+    .severity_id  = 0
+  }
+  .time = to_unix_timestamp(.timestamp, unit: "milliseconds") ?? to_unix_timestamp(now(), unit: "milliseconds")
+
+  .email = {
+    "from": email_from,
+    "to":   email_to,
+    "size": email_size
+  }
+
+  .smtp_status = smtp_status
+  .relay       = relay_host
+
+  .src_endpoint = {
+    "ip":       client_ip,
+    "hostname": client_host
+  }
+
+  .metadata = {
+    "product": {
+      "name":        "Postfix",
+      "vendor_name": "Postfix"
+    },
+    "version": "1.0.0"
+  }
+
+  # Full raw line (syslog header + message) + unique identifier
+  _pid = if pid_raw != null { "[" + (to_string(pid_raw) ?? "") + "]" } else { "" }
+  _ts  = to_string(.timestamp) ?? ""
+  .raw = _ts + " " + hostname + " " + app + _pid + ": " + raw_msg
+  .uid = uuid_v4()
+
+  del(.message)
+  del(.timestamp)
+  del(.hostname)
+  del(.appname)
+  del(.facility)
+  del(.severity)
+  del(.procid)
+  del(.msgid)
+  del(.version)
+  del(.source_type)
+'''
+
+# --- FILTER : valid OCSF events ---
+[transforms.postfix_filter_valid]
+type      = "filter"
+inputs    = ["postfix_parse_and_normalize"]
+condition = '.class_uid == 4009'
+
+[transforms.postfix_filter_failed]
+type      = "filter"
+inputs    = ["postfix_parse_and_normalize"]
+condition = '.class_uid != 4009'
+
+# --- TRANSFORM : extract failures for raw-logs ---
+[transforms.postfix_raw_only]
+type   = "remap"
+inputs = ["postfix_filter_failed"]
+source = '''
+  # A runtime abort in the normalize transform forwards the ORIGINAL event here
+  # (drop_on_error defaults to false): every field must be re-derived locally.
+  raw_val = .raw
+  if raw_val == null { raw_val = .message }
+  if raw_val == null { raw_val = encode_json(.) }
+  now_ms = to_unix_timestamp(now(), unit: "milliseconds")
+  uid_val = .uid
+  if uid_val == null { uid_val = uuid_v4() }
+  time_val = .time
+  if time_val == null { time_val = now_ms }
+  received_val = .received_time
+  if received_val == null { received_val = now_ms }
+  . = {
+    "uid":           uid_val,
+    "time":          time_val,
+    "received_time": received_val,
+    "tenant_id":     "${TENANT_ID}",
+    "datasource_id": "${DATASOURCE_ID}",
+    "source_type":   "linux/postfix",
+    "parser":        "postfix",
+    "parse_status":  "failed",
+    "parse_error":   "postfix_pattern_unmatched",
+    "raw":           raw_val
+  }
+'''
+
+# --- SINK : Quickwit OCSF (4009 routed to ocsf-network, no dedicated email index) ---
+[sinks.postfix_quickwit]
+type                = "http"
+inputs              = ["postfix_filter_valid"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-network/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.postfix_quickwit.request]
+headers.Content-Type = "application/x-ndjson"
+
+# --- SINK : Quickwit raw-logs ---
+[sinks.postfix_quickwit_raw]
+type                = "http"
+inputs              = ["postfix_raw_only"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.postfix_quickwit_raw.request]
+headers.Content-Type = "application/x-ndjson"

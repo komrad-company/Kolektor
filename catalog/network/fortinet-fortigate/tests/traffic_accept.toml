@@ -15,6 +15,7 @@ extract_from = "fortigate_parse_and_normalize"
 type   = "vrl"
 source = '''
   assert_eq!(.class_uid, 4001)
+  assert_eq!(.activity_id, 6)
   assert_eq!(.action, "Allow")
   assert_eq!(.action_id, 1)
   assert_eq!(.severity_id, 2)

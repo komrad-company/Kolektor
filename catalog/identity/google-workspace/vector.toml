@@ -1,0 +1,222 @@
+# ==============================================================================
+# Google Workspace — Admin SDK Reports API activities
+# OCSF Classes : 3002 (Authentication — login) · 3001 (Account Change — admin /
+#                user_accounts / groups) · 6003 (API Activity — everything else)
+# Input        : HTTP push — POST JSON on ${LISTEN_PORT:-8523}
+#                A fetcher polls the Reports API and posts each activity object.
+# ==============================================================================
+
+[sources.google_workspace_input]
+type     = "http_server"
+address  = "0.0.0.0:${LISTEN_PORT:-8523}"
+encoding = "json"
+
+[transforms.google_workspace_parse_and_normalize]
+type   = "remap"
+inputs = ["google_workspace_input"]
+source = '''
+  tenant_id     = "${TENANT_ID}"
+  datasource_id = "${DATASOURCE_ID}"
+  received_time = to_unix_timestamp(now(), unit: "milliseconds")
+  raw_msg       = encode_json(.)
+
+  id_obj           = object(.id) ?? {}
+  application_name = to_string(get(id_obj, ["applicationName"]) ?? null) ?? null
+  events           = array(.events) ?? []
+  is_valid         = application_name != null && application_name != "" && length(events) > 0
+
+  ocsf_class_uid    = 0
+  ocsf_category_uid = 0
+  ocsf_activity_id  = 0
+  ocsf_severity_id  = 0
+  ocsf_status       = "Unknown"
+  ocsf_status_id    = 0
+  ocsf_actor        = {}
+  ocsf_src_endpoint = {}
+  ocsf_metadata     = {}
+  ocsf_unmapped     = {}
+  ts                = received_time
+
+  if is_valid {
+    # id.time is RFC 3339 (e.g. 2024-04-14T10:23:45.123Z).
+    time_str  = to_string(get(id_obj, ["time"]) ?? null) ?? ""
+    parsed_ts = parse_timestamp(time_str, format: "%+") ?? null
+    ts = if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { received_time }
+
+    # Reports API groups one or more events under a single activity. Map the
+    # first event for name/type; the rest are preserved in unmapped.
+    first_event   = object(get(events, [0]) ?? {}) ?? {}
+    event_name    = to_string(get(first_event, ["name"]) ?? null) ?? null
+    event_type    = to_string(get(first_event, ["type"]) ?? null) ?? null
+    extra_events  = if length(events) > 1 { slice!(events, 1) } else { [] }
+
+    actor_obj   = object(.actor) ?? {}
+    actor_email = to_string(get(actor_obj, ["email"])     ?? null) ?? null
+    actor_id    = to_string(get(actor_obj, ["profileId"]) ?? null) ?? null
+
+    ocsf_actor = {
+      "user": {
+        "email_addr": actor_email,
+        "name":       actor_email,
+        "uid":        actor_id
+      }
+    }
+
+    ocsf_src_endpoint = { "ip": to_string(.ipAddress) ?? null }
+
+    ocsf_metadata = {
+      "product": {
+        "name":        "Google Workspace",
+        "vendor_name": "Google"
+      },
+      "version": "1.0.0",
+      "uid":     to_string(get(id_obj, ["uniqueQualifier"]) ?? null) ?? null
+    }
+
+    ocsf_unmapped = {
+      "application_name": application_name,
+      "event_name":       event_name,
+      "event_type":       event_type,
+      "customer_id":      to_string(get(id_obj, ["customerId"]) ?? null) ?? null,
+      "extra_events":     extra_events
+    }
+
+    if application_name == "login" {
+      # Authentication: activity from the event name, status from success/failure.
+      login_activity_id = 99
+      if event_name == "login_success" || event_name == "login" {
+        login_activity_id = 1
+      } else if event_name == "logout" {
+        login_activity_id = 2
+      }
+
+      is_login_failure = event_name == "login_failure"
+
+      ocsf_class_uid    = 3002
+      ocsf_category_uid = 3
+      ocsf_activity_id  = login_activity_id
+      ocsf_severity_id  = if is_login_failure { 3 } else { 1 }
+      ocsf_status       = if is_login_failure { "Failure" } else { "Success" }
+      ocsf_status_id    = if is_login_failure { 2 } else { 1 }
+    } else if application_name == "admin" || application_name == "user_accounts" || application_name == "groups" {
+      # Account Change: the Reports API verbs are too varied to map reliably.
+      ocsf_class_uid    = 3001
+      ocsf_category_uid = 3
+      ocsf_activity_id  = 99
+      ocsf_severity_id  = 1
+      ocsf_status       = "Success"
+      ocsf_status_id    = 1
+    } else {
+      # API Activity for drive, token, calendar and every other application.
+      verb = to_string(event_name)
+      api_activity_id = 99
+      if starts_with(verb, "create") || starts_with(verb, "add") {
+        api_activity_id = 1
+      } else if starts_with(verb, "view") || starts_with(verb, "download") || starts_with(verb, "list") {
+        api_activity_id = 2
+      } else if starts_with(verb, "edit") || starts_with(verb, "update") || starts_with(verb, "rename") {
+        api_activity_id = 3
+      } else if starts_with(verb, "delete") || starts_with(verb, "remove") {
+        api_activity_id = 4
+      }
+
+      ocsf_class_uid    = 6003
+      ocsf_category_uid = 6
+      ocsf_activity_id  = api_activity_id
+      ocsf_severity_id  = 1
+      ocsf_status       = "Success"
+      ocsf_status_id    = 1
+
+      ocsf_metadata = set!(ocsf_metadata, ["product", "feature", "name"], application_name)
+    }
+  }
+
+  . = {
+    "class_uid":     ocsf_class_uid,
+    "category_uid":  ocsf_category_uid,
+    "activity_id":   ocsf_activity_id,
+    "severity_id":   ocsf_severity_id,
+    "time":          ts,
+    "status":        ocsf_status,
+    "status_id":     ocsf_status_id,
+    "actor":         ocsf_actor,
+    "src_endpoint":  ocsf_src_endpoint,
+    "metadata":      ocsf_metadata,
+    "unmapped":      ocsf_unmapped,
+    "tenant_id":     tenant_id,
+    "datasource_id": datasource_id,
+    "received_time": received_time,
+    "raw":           raw_msg,
+    "uid":           uuid_v4()
+  }
+'''
+
+[transforms.google_workspace_filter_valid]
+type      = "filter"
+inputs    = ["google_workspace_parse_and_normalize"]
+condition = '.class_uid != 0'
+
+[transforms.google_workspace_filter_failed]
+type      = "filter"
+inputs    = ["google_workspace_parse_and_normalize"]
+condition = '.class_uid == 0'
+
+[transforms.google_workspace_route_by_class]
+type   = "route"
+inputs = ["google_workspace_filter_valid"]
+route.identity = '.class_uid == 3002 || .class_uid == 3001'
+route.audit    = '.class_uid == 6003'
+
+[transforms.google_workspace_raw_failed]
+type   = "remap"
+inputs = ["google_workspace_filter_failed"]
+source = '''
+  . = {
+    "uid":           .uid,
+    "time":          .time,
+    "received_time": .received_time,
+    "tenant_id":     .tenant_id,
+    "datasource_id": .datasource_id,
+    "source_type":   "identity/google-workspace",
+    "parser":        "google-workspace",
+    "parse_status":  "failed",
+    "parse_error":   "google_workspace_activity_shape_invalid",
+    "raw":           .raw
+  }
+'''
+
+[sinks.google_workspace_quickwit_identity]
+type                = "http"
+inputs              = ["google_workspace_route_by_class.identity"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-identity/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.google_workspace_quickwit_identity.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.google_workspace_quickwit_audit]
+type                = "http"
+inputs              = ["google_workspace_route_by_class.audit"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/ocsf-audit/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.google_workspace_quickwit_audit.request]
+headers.Content-Type = "application/x-ndjson"
+
+[sinks.google_workspace_quickwit_raw_failed]
+type                = "http"
+inputs              = ["google_workspace_raw_failed"]
+uri                 = "${QUICKWIT_ENDPOINT}/api/v1/raw-logs/ingest"
+encoding.codec      = "json"
+framing.method      = "newline_delimited"
+batch.max_events    = 1000
+batch.timeout_secs  = 5
+
+[sinks.google_workspace_quickwit_raw_failed.request]
+headers.Content-Type = "application/x-ndjson"

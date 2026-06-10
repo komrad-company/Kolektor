@@ -1,4 +1,4 @@
-FROM timberio/vector:0.54.0-debian@sha256:099732c890b095d5222f59bdc82a0579ae3d48b9e2407f3680586dd8d2f75f64
+FROM timberio/vector:0.55.0-debian@sha256:a4be1111b40303524aae2ffb02cd59cef2a4e9753bd13d265bf0233e921828d9
 
 # OS CVE patching — see .hadolint.yaml for the DL3005 justification.
 # curl is required by /init/create-indexes.sh (Quickwit index bootstrap).

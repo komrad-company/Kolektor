@@ -5,7 +5,7 @@
 Normalise les logs Microsoft Graph Entra ID :
 
 - `/auditLogs/signIns` vers OCSF 3002 Authentication ;
-- `/auditLogs/directoryAudits` vers OCSF 6001 API Activity.
+- `/auditLogs/directoryAudits` vers OCSF 6003 API Activity.
 
 Le parser expose un endpoint HTTP sur `${LISTEN_PORT:-8518}`. Le fetcher externe
 POST du NDJSON (un objet JSON par ligne) sur cet endpoint. Les deux types d'events

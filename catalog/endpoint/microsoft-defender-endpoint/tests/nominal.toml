@@ -1,0 +1,52 @@
+[[tests]]
+name = "Defender — Suspicious PowerShell alert (High, all fields)"
+
+[[tests.inputs]]
+insert_at = "defender_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  Timestamp                 = "2024-04-14T10:23:45.1234567Z"
+  DeviceId                  = "abc"
+  DeviceName                = "WIN-01"
+  AlertId                   = "da123"
+  Title                     = "Suspicious PowerShell"
+  Severity                  = "High"
+  Category                  = "Execution"
+  FileName                  = "powershell.exe"
+  FolderPath                = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0"
+  ProcessCommandLine        = "powershell -enc ZQBjAGgAbwA="
+  AccountName               = "jdoe"
+  AccountDomain             = "CORP"
+  InitiatingProcessFileName = "cmd.exe"
+  RemoteIP                  = "1.2.3.4"
+
+[[tests.outputs]]
+extract_from = "defender_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 2001)
+  assert_eq!(.category_uid, 2)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.severity_id, 4)
+  assert_eq!(.time, 1713090225123)
+  assert_eq!(.finding_info.title, "Suspicious PowerShell")
+  assert_eq!(.finding_info.uid, "da123")
+  assert_eq!(.finding_info.types[0], "Execution")
+  assert_eq!(.process.name, "powershell.exe")
+  assert_eq!(.process.file.name, "powershell.exe")
+  assert_eq!(.process.file.path, "C:\\Windows\\System32\\WindowsPowerShell\\v1.0")
+  assert_eq!(.process.cmd_line, "powershell -enc ZQBjAGgAbwA=")
+  assert_eq!(.actor.user.name, "jdoe")
+  assert_eq!(.actor.user.domain, "CORP")
+  assert_eq!(.actor.process.name, "cmd.exe")
+  assert_eq!(.device.uid, "abc")
+  assert_eq!(.device.hostname, "WIN-01")
+  assert_eq!(.dst_endpoint.ip, "1.2.3.4")
+  assert_eq!(.metadata.product.name, "Microsoft Defender for Endpoint")
+  assert_eq!(.metadata.product.vendor_name, "Microsoft")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

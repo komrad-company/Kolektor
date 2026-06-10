@@ -1,6 +1,6 @@
 # ==============================================================================
 # CrowdStrike Falcon — JSON syslog (Streaming API / SIEM Connector)
-# OCSF Class : 1003 (Process Activity) / 4001 (Network Activity) / 2001 (Detection)
+# OCSF Class : 1007 (Process Activity) / 4001 (Network Activity) / 2001 (Detection)
 # Input      : Syslog TCP (JSON payload)
 # Tested with: CrowdStrike Falcon SIEM Connector, Streaming API v2
 # ==============================================================================
@@ -32,15 +32,20 @@ source = '''
 
     # Classification
     # DetectionSummaryEvent → 2001 (Security Finding)
-    # ProcessRollup2 → 1003 (Process Activity)
+    # ProcessRollup2 → 1007 (Process Activity)
     # NetworkContainmentEvent / NetworkDetection → 4001 (Network)
     # default → 2001
-    is_detection = event_type == "DetectionSummaryEvent" || event_type == "IncidentSummaryEvent"
     is_process = event_type == "ProcessRollup2" || event_type == "SyntheticProcessRollup2"
     is_network = event_type == "NetworkContainmentEvent" || event_type == "NetworkDetection"
 
-    class_uid = if is_process { 1003 } else if is_network { 4001 } else { 2001 }
+    class_uid = if is_process { 1007 } else if is_network { 4001 } else { 2001 }
     category_uid = if is_network { 4 } else if is_process { 1 } else { 2 }
+
+    # activity_id (mandatory per D1) — D6 enums per class:
+    # Process Activity 1007 → 1 Launch (ProcessRollup2 is a process-create event)
+    # Network Activity 4001 → 6 Traffic
+    # Security Finding 2001 → 1 (default per D1 when exact enum is unknown)
+    activity_id = if is_process { 1 } else if is_network { 6 } else { 1 }
 
     # Severity : CrowdStrike SeverityName → OCSF severity_id
     cs_severity_name = to_string(event.SeverityName) ?? ""
@@ -59,6 +64,7 @@ source = '''
 
     .class_uid    = class_uid
     .category_uid = category_uid
+    .activity_id  = activity_id
     .severity_id  = ocsf_severity
     .time         = ts
 
@@ -90,8 +96,12 @@ source = '''
       }
     }
 
+    # Explicit cascade — to_string(null)="" is infallible, so `?? to_string(y)`
+    # is dead. Pre-compute (never put `if` inside the object literal).
+    src_ip = if event.LocalIP != null { to_string(event.LocalIP) ?? null } else if event.aip != null { to_string(event.aip) ?? null } else { null }
+
     .src_endpoint = {
-      "ip":       to_string(event.LocalIP) ?? to_string(event.aip) ?? null,
+      "ip":       src_ip,
       "hostname": to_string(event.ComputerName) ?? null
     }
 
@@ -104,9 +114,14 @@ source = '''
     analytic_uid  = if event.TechniqueId != null { to_string(event.TechniqueId) ?? null } else { null }
     analytic_name = if event.Technique != null { to_string(event.Technique) ?? null } else { null }
 
+    # Explicit cascade — to_string(null)="" is infallible, the `?? to_string(y)`
+    # branch is dead. Pre-compute (never put `if` inside the object literal).
+    finding_title = if event.DetectName != null { to_string(event.DetectName) ?? null } else if event.DetectDescription != null { to_string(event.DetectDescription) ?? null } else { null }
+    finding_uid = if event.DetectId != null { to_string(event.DetectId) ?? null } else if meta.eventId != null { to_string(meta.eventId) ?? null } else { null }
+
     .finding_info = {
-      "title":    to_string(event.DetectName) ?? to_string(event.DetectDescription) ?? null,
-      "uid":      to_string(event.DetectId) ?? to_string(meta.eventId) ?? null,
+      "title":    finding_title,
+      "uid":      finding_uid,
       "types":    [to_string(event.Tactic) ?? ""],
       "analytic": {
         "uid":  analytic_uid,
@@ -190,12 +205,12 @@ source = '''
 '''
 
 # --- ROUTE : dispatch par class_uid ---
-# 1003 ProcessRollup2 + 2001 DetectionSummary → ocsf-endpoint
+# 1007 ProcessRollup2 + 2001 DetectionSummary → ocsf-endpoint
 # 4001 NetworkDetection/NetworkContainment → ocsf-network
 [transforms.crowdstrike_route_by_class]
 type   = "route"
 inputs = ["crowdstrike_filter_valid"]
-route.endpoint = '.class_uid == 1001 || .class_uid == 1003 || .class_uid == 2001'
+route.endpoint = '.class_uid == 1001 || .class_uid == 1007 || .class_uid == 2001'
 route.network  = '.class_uid == 4001'
 
 # --- SINK : Quickwit ocsf-endpoint ---

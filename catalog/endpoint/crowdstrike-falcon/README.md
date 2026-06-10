@@ -4,7 +4,7 @@
 Collecte les events CrowdStrike Falcon via le SIEM Connector (JSON syslog).
 Normalise en OCSF selon le type d'event :
 - DetectionSummaryEvent → classe 2001 (Security Finding)
-- ProcessRollup2 → classe 1003 (Process Activity)
+- ProcessRollup2 → classe 1007 (Process Activity)
 - NetworkDetection → classe 4001 (Network Activity)
 
 ## Format attendu

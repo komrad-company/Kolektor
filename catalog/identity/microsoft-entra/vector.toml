@@ -1,6 +1,6 @@
 # ==============================================================================
 # Microsoft Entra ID — Graph API audit logs
-# OCSF Classes : 3002 (Authentication — sign-in) · 6001 (API Activity — directory audit)
+# OCSF Classes : 3002 (Authentication — sign-in) · 6003 (API Activity — directory audit)
 # Input        : HTTP push — POST NDJSON sur ${LISTEN_PORT:-8518}
 #                Le fetcher poste chaque event JSON sur une ligne distincte.
 # ==============================================================================
@@ -30,6 +30,7 @@ source = '''
 
   ocsf_class_uid    = 0
   ocsf_category_uid = 0
+  ocsf_activity_id  = 0
   ocsf_severity_id  = 0
   ocsf_status       = "Unknown"
   ocsf_status_id    = 0
@@ -48,6 +49,7 @@ source = '''
 
     ocsf_class_uid    = 3002
     ocsf_category_uid = 3
+    ocsf_activity_id  = 1
     ocsf_severity_id  = if is_failure { 3 } else { 1 }
     ocsf_status       = if is_failure { "Failure" } else { "Success" }
     ocsf_status_id    = if is_failure { 2 } else { 1 }
@@ -93,8 +95,22 @@ source = '''
     result         = to_string(.result) ?? null
     is_failure     = result != null && result != "" && result != "success"
 
-    ocsf_class_uid    = 6001
+    # API Activity activity_id from the activityDisplayName verb.
+    activity_display = to_string(.activityDisplayName) ?? ""
+    audit_activity_id = 99
+    if starts_with(activity_display, "Create") || starts_with(activity_display, "Add") {
+      audit_activity_id = 1
+    } else if starts_with(activity_display, "Get") || starts_with(activity_display, "List") || starts_with(activity_display, "Read") {
+      audit_activity_id = 2
+    } else if starts_with(activity_display, "Update") || starts_with(activity_display, "Set") || starts_with(activity_display, "Modify") {
+      audit_activity_id = 3
+    } else if starts_with(activity_display, "Delete") || starts_with(activity_display, "Remove") {
+      audit_activity_id = 4
+    }
+
+    ocsf_class_uid    = 6003
     ocsf_category_uid = 6
+    ocsf_activity_id  = audit_activity_id
     ocsf_severity_id  = if is_failure { 3 } else { 1 }
     ocsf_status       = if is_failure { "Failure" } else { "Success" }
     ocsf_status_id    = if is_failure { 2 } else { 1 }
@@ -137,6 +153,7 @@ source = '''
   . = {
     "class_uid":     ocsf_class_uid,
     "category_uid":  ocsf_category_uid,
+    "activity_id":   ocsf_activity_id,
     "severity_id":   ocsf_severity_id,
     "time":          ts,
     "status":        ocsf_status,
@@ -174,7 +191,7 @@ condition = '.class_uid == 0'
 type   = "route"
 inputs = ["microsoft_entra_filter_valid"]
 route.identity = '.class_uid == 3002'
-route.audit    = '.class_uid == 6001'
+route.audit    = '.class_uid == 6003'
 
 [transforms.microsoft_entra_raw_failed]
 type   = "remap"

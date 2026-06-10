@@ -18,6 +18,7 @@ source = '''
   assert_eq!(.severity_id, 2)
   assert_eq!(.http_response.code, 403)
   assert_eq!(.http_request.http_method, "POST")
+  assert_eq!(.activity_id, 6)
   assert_eq!(.src_endpoint.ip, "185.220.101.42")
 '''
 

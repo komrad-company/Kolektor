@@ -22,8 +22,8 @@ security (gitleaks) ──┬── container_sast (hadolint + grype)──┐
 |---|---|---|
 | `security` | gitleaks secret detection | reusable — `Kontinuous-integration/security-pipeline.yml@main` |
 | `container_sast` | hadolint on `Dockerfile`, grype (`--fail-on high --only-fixed`) on the built image | inline |
-| `catalog` | `python3 ci/catalog_index.py --check` — `catalog/index.json` in sync with manifests | inline |
-| `vector` | `ci/validate.sh`, `ci/test.sh`, `ci/coverage.sh` in `timberio/vector:0.54.0-debian`, then `ci/report.py` markdown artifact | inline |
+| `catalog` | `ci/catalog_index.py --check` (index sync), `ci/lint_vrl.py` (VRL antipatterns), `ci/validate_ocsf.py` (OCSF enum/category coherence) | inline |
+| `vector` | `ci/validate.sh`, `ci/test.sh`, `ci/coverage.sh` in `timberio/vector:0.55.0-debian`, then `ci/report.py` markdown artifact | inline |
 | `publish` | buildah build + push to `ghcr.io/komrad-company/kolektor` — PR: build only, `develop`: `sha-*` tag, `v*` tags: semver + `latest` | reusable — `Kontinuous-integration/container-pipeline.yml@main` |
 
 Vector-specific logic stays inline in this repository: it serves no other

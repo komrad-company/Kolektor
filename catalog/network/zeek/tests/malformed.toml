@@ -1,0 +1,67 @@
+[[tests]]
+name = "Zeek — malformed JSON quarantined to raw-logs"
+
+[[tests.inputs]]
+insert_at = "zeek_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = "this is not json"
+
+[[tests.outputs]]
+extract_from = "zeek_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.category_uid, 0)
+  assert_eq!(.severity_id, 0)
+  assert_eq!(.raw, "this is not json")
+  assert!(exists(.uid))
+'''
+
+[[tests.outputs]]
+extract_from = "zeek_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "network/zeek")
+  assert_eq!(.parser, "zeek")
+  assert_eq!(.parse_error, "zeek_json_invalid_or_unsupported_path")
+  assert_eq!(.raw, "this is not json")
+  assert!(exists(.uid))
+  assert!(exists(.tenant_id))
+  assert!(exists(.datasource_id))
+'''
+
+[[tests]]
+name = "Zeek — unsupported _path quarantined to raw-logs"
+
+[[tests.inputs]]
+insert_at = "zeek_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"_path":"x509","ts":1713091425.0,"id":"FakeCert","certificate.serial":"AB12"}'
+
+[[tests.outputs]]
+extract_from = "zeek_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+'''
+
+[[tests.outputs]]
+extract_from = "zeek_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.parse_error, "zeek_json_invalid_or_unsupported_path")
+'''

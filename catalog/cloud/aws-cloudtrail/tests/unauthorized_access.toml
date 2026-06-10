@@ -29,7 +29,8 @@ extract_from = "cloudtrail_parse_and_normalize"
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  assert_eq!(.class_uid, 6001)
+  assert_eq!(.class_uid, 6003)
+  assert_eq!(.activity_id, 2)
   assert_eq!(.severity_id, 3)
   assert_eq!(.status, "Failure")
   assert_eq!(.status_id, 2)
@@ -74,6 +75,7 @@ type   = "vrl"
 source = '''
   assert_eq!(.api.operation, "RunInstances")
   assert_eq!(.api.service.name, "ec2")
+  assert_eq!(.activity_id, 99)
   assert_eq!(.actor.user.name, "devops")
   assert_eq!(.status, "Success")
 '''

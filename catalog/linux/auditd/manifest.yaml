@@ -9,3 +9,4 @@ ocsf_outputs:
     category_uid: 3
     index: ocsf-identity
     route: identity
+version: 0.1.0

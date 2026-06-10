@@ -17,6 +17,7 @@ source = '''
   assert_eq!(.class_uid, 2001)
   assert_eq!(.category_uid, 2)
   assert_eq!(.severity_id, 3)
+  assert_eq!(.activity_id, 1)
   assert_eq!(.src_endpoint.ip, "10.0.0.5")
   assert_eq!(.dst_endpoint.ip, "8.8.8.8")
   assert_eq!(.dst_endpoint.port, 53)

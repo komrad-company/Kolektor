@@ -1,0 +1,49 @@
+[[tests]]
+name = "Falco — Terminal shell in container (Warning)"
+
+[[tests.inputs]]
+insert_at = "falco_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  output   = "10:23:45.123456789: Warning A shell was spawned in a container with an attached terminal (user=root user_loginuid=-1 k8s.ns=default k8s.pod=nginx-7d8b49557c-2xk4p container=a1b2c3d4e5f6 shell=bash parent=runc cmdline=bash terminal=34816 container_id=a1b2c3d4e5f6 image=docker.io/library/nginx)"
+  priority = "Warning"
+  rule     = "Terminal shell in container"
+  time     = "2024-04-14T10:23:45.123456789Z"
+  source   = "syscall"
+  tags     = ["container", "shell", "mitre_execution", "T1059"]
+  hostname = "node1"
+
+  [tests.inputs.log_fields.output_fields]
+  "container.id"  = "a1b2c3d4e5f6"
+  "proc.cmdline"  = "bash"
+  "user.name"     = "root"
+  "k8s.pod.name"  = "nginx-7d8b49557c-2xk4p"
+  "k8s.ns.name"   = "default"
+
+[[tests.outputs]]
+extract_from = "falco_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 2001)
+  assert_eq!(.category_uid, 2)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.severity_id, 3)
+  assert_eq!(.time, 1713090225123)
+  assert_eq!(.finding_info.title, "Terminal shell in container")
+  assert_eq!(.finding_info.types, ["container", "shell", "mitre_execution", "T1059"])
+  assert!(starts_with(string!(.finding_info.desc), "10:23:45"))
+  assert_eq!(.src_endpoint.hostname, "node1")
+  assert_eq!(.metadata.product.name, "Falco")
+  assert_eq!(.metadata.product.vendor_name, "Falcosecurity")
+  assert_eq!(.unmapped.priority, "Warning")
+  assert_eq!(.unmapped.source, "syscall")
+  assert_eq!(.unmapped.output_fields."user.name", "root")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+  assert!(exists(.tenant_id))
+  assert!(exists(.datasource_id))
+  assert!(exists(.received_time))
+'''

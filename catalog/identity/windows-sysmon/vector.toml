@@ -1,6 +1,7 @@
 # ==============================================================================
-# Windows Sysmon — Events 1/3/7/11/22
-# OCSF Class : 1003 (Process Activity) / 4001 (Network Activity) / 1001 (File) / 4003 (DNS)
+# Windows Sysmon — Events 1/3/7/22
+# OCSF Class : 1007 (Process Activity) / 1005 (Module Activity)
+#              4001 (Network Activity) / 4003 (DNS Activity)
 # Input      : HTTP (JSON from Winlogbeat/NXLog)
 # Tested with: Sysmon 15.x, Windows 10/11/Server 2022
 # ==============================================================================
@@ -16,15 +17,14 @@ encoding = "json"
 type   = "remap"
 inputs = ["sysmon_input"]
 source = '''
-  raw_msg = encode_json(.)
-
-  .tenant_id     = "${TENANT_ID}"
-  .datasource_id = "${DATASOURCE_ID}"
-  .received_time = to_unix_timestamp(now(), unit: "milliseconds")
+  raw_msg       = encode_json(.)
+  tenant_id     = "${TENANT_ID}"
+  datasource_id = "${DATASOURCE_ID}"
+  received_time = to_unix_timestamp(now(), unit: "milliseconds")
 
   # Sysmon via Winlogbeat (.winlog.*) or NXLog (top level). Explicit null
-  # checks: to_int(null)=0 / to_string(null)="" are infallible, so a ??
-  # chain never reaches the top-level fallback.
+  # checks: to_int(null)=0 / to_string(null)="" are infallible, so a `??`
+  # chain never reaches the top-level fallback — it must be an if/else.
   event_id = 0
   if .winlog.event_id != null {
     event_id = to_int(.winlog.event_id) ?? 0
@@ -39,86 +39,55 @@ source = '''
     computer = to_string(.computer_name) ?? "unknown"
   }
 
-  ts_str = to_string(.timestamp) ?? null
-  ts = if ts_str != null {
-    parsed_ts = parse_timestamp(ts_str, format: "%+") ?? null
-    if parsed_ts != null { to_unix_timestamp!(parsed_ts, unit: "milliseconds") } else { to_unix_timestamp!(now(), unit: "milliseconds") }
-  } else {
-    to_unix_timestamp!(now(), unit: "milliseconds")
+  # Event time, not transport time. Prefer Sysmon's own UtcTime
+  # ("YYYY-MM-DD HH:MM:SS.sss", UTC), then Winlogbeat's @timestamp (RFC3339),
+  # and only fall back to the http_server ingest timestamp when both absent.
+  event_time_str = to_string(event_data.UtcTime) ?? null
+  atstamp_str    = to_string(get(., ["@timestamp"]) ?? null) ?? null
+  parsed_time = null
+  if event_time_str != null {
+    parsed_time = parse_timestamp(event_time_str, format: "%Y-%m-%d %H:%M:%S%.f") ?? parse_timestamp(event_time_str, format: "%+") ?? null
+  } else if atstamp_str != null {
+    parsed_time = parse_timestamp(atstamp_str, format: "%+") ?? null
   }
+  if parsed_time == null {
+    ingest_str = to_string(.timestamp) ?? null
+    if ingest_str != null {
+      parsed_time = parse_timestamp(ingest_str, format: "%+") ?? null
+    }
+  }
+  ts = if parsed_time != null { to_unix_timestamp!(parsed_time, unit: "milliseconds") } else { received_time }
 
-  # Classification :
-  # 1  = Process Create → 1003
-  # 3  = Network Connection → 4001
-  # 7  = Image Loaded → 1003
-  # 11 = File Created → 1001
-  # 22 = DNS Query → 4003
-  is_process = event_id == 1 || event_id == 7
+  # Classification (D1/D6):
+  # 1  = Process Create     → 1007 Process Activity   (category 1)
+  # 7  = Image/Module Loaded → 1005 Module Activity    (category 1)
+  # 3  = Network Connection → 4001 Network Activity    (category 4)
+  # 22 = DNS Query          → 4003 DNS Activity        (category 4)
+  is_process = event_id == 1
+  is_module  = event_id == 7
   is_network = event_id == 3
-  is_file = event_id == 11
-  is_dns = event_id == 22
-  valid = is_process || is_network || is_file || is_dns
+  is_dns     = event_id == 22
 
-  class_uid = if is_process { 1003 } else if is_network { 4001 } else if is_file { 1001 } else if is_dns { 4003 } else { 0 }
-  category_uid = if is_network || is_dns { 4 } else if is_process || is_file { 1 } else { 0 }
+  class_uid = if is_process { 1007 } else if is_module { 1005 } else if is_network { 4001 } else if is_dns { 4003 } else { 0 }
+  category_uid = if class_uid != 0 { to_int(floor(class_uid / 1000)) } else { 0 }
+
+  # activity_id per class (D6). Sysmon EventID is fixed per event type, so
+  # the activity is known: process-create=Launch, module-load=Other (Sysmon
+  # never reports unload), network=Traffic, DNS=Query.
+  activity_id = if is_process { 1 } else if is_module { 99 } else if is_network { 6 } else if is_dns { 1 } else { 0 }
 
   ocsf_severity = 1
 
-  .class_uid    = class_uid
-  .category_uid = category_uid
-  .severity_id  = ocsf_severity
-  .time         = ts
+  # Sysmon Hashes is "SHA256=<hex>,MD5=<hex>,...". Extract the SHA256 value.
+  hashes_str  = to_string(event_data.Hashes) ?? null
+  sha256_match = if hashes_str != null { parse_regex(hashes_str, r'SHA256=(?P<value>[0-9A-Fa-f]+)') ?? null } else { null }
+  sha256_value = if sha256_match != null { sha256_match.value } else { null }
 
-  # Process info (Event 1 — Process Create)
-  .actor = {
-    "user": {
-      "name": to_string(event_data.User) ?? null
-    },
-    "process": {
-      "pid":          to_int(event_data.ParentProcessId) ?? null,
-      "name":         to_string(event_data.ParentImage) ?? null,
-      "cmd_line":     to_string(event_data.ParentCommandLine) ?? null
-    }
-  }
-
-  .process = {
-    "pid":          to_int(event_data.ProcessId) ?? null,
-    "name":         to_string(event_data.Image) ?? null,
-    "cmd_line":     to_string(event_data.CommandLine) ?? null,
-    "file": {
-      "hashes": [
-        { "algorithm": "SHA256", "value": to_string(event_data.Hashes) ?? null }
-      ]
-    }
-  }
-
-  # Network (Event 3)
-  .src_endpoint = {
-    "ip":       to_string(event_data.SourceIp) ?? null,
-    "port":     to_int(event_data.SourcePort) ?? null,
-    "hostname": computer
-  }
-
-  .dst_endpoint = {
-    "ip":       to_string(event_data.DestinationIp) ?? null,
-    "port":     to_int(event_data.DestinationPort) ?? null,
-    "hostname": to_string(event_data.DestinationHostname) ?? null
-  }
-
-  # File (Event 11)
-  .file = {
-    "name": to_string(event_data.TargetFilename) ?? null
-  }
-
-  # DNS (Event 22)
   query_results = to_string(event_data.QueryResults) ?? null
-  qtype_match = if query_results != null { parse_regex(query_results, r'type:\s*(?P<type>\d+)') ?? {} } else { {} }
-  .query = {
-    "hostname": to_string(event_data.QueryName) ?? null,
-    "type":     qtype_match.type
-  }
+  qtype_match   = if query_results != null { parse_regex(query_results, r'type:\s*(?P<type>\d+)') ?? null } else { null }
+  query_type    = if qtype_match != null { qtype_match.type } else { null }
 
-  .metadata = {
+  metadata = {
     "product": {
       "name":        "Sysmon",
       "vendor_name": "Microsoft"
@@ -127,22 +96,87 @@ source = '''
     "uid":     to_string(event_id)
   }
 
-  .unmapped = {
-    "event_id":    event_id,
-    "rule_name":   to_string(event_data.RuleName) ?? null,
-    "guid":        to_string(event_data.ProcessGuid) ?? null,
+  unmapped = {
+    "event_id":      event_id,
+    "rule_name":     to_string(event_data.RuleName) ?? null,
+    "guid":          to_string(event_data.ProcessGuid) ?? null,
     "query_results": query_results
   }
 
-  .raw = raw_msg
-  .uid = uuid_v4()
-  del(.message)
-  del(.winlog)
-  del(.event_data)
-  del(.timestamp)
-  del(.computer_name)
-  del(.event_id)
-  del(.source_type)
+  # Rebuild the document from scratch — only OCSF fields. The winlogbeat
+  # envelope (agent, ecs, host, @timestamp, .path, .message) never leaks.
+  . = {
+    "class_uid":     class_uid,
+    "category_uid":  category_uid,
+    "severity_id":   ocsf_severity,
+    "activity_id":   activity_id,
+    "time":          ts,
+    "received_time": received_time,
+    "tenant_id":     tenant_id,
+    "datasource_id": datasource_id,
+    "metadata":      metadata,
+    "unmapped":      unmapped,
+    "raw":           raw_msg,
+    "uid":           uuid_v4()
+  }
+
+  # Per-class substructures — attached only to the class that owns them, never
+  # null-filled objects on the wrong event type.
+  if is_process {
+    .actor = {
+      "user": { "name": to_string(event_data.User) ?? null },
+      "process": {
+        "pid":      to_int(event_data.ParentProcessId) ?? null,
+        "name":     to_string(event_data.ParentImage) ?? null,
+        "cmd_line": to_string(event_data.ParentCommandLine) ?? null
+      }
+    }
+    .process = {
+      "pid":      to_int(event_data.ProcessId) ?? null,
+      "name":     to_string(event_data.Image) ?? null,
+      "cmd_line": to_string(event_data.CommandLine) ?? null,
+      "file": {
+        "hashes": [
+          { "algorithm": "SHA256", "value": sha256_value }
+        ]
+      }
+    }
+  }
+
+  if is_module {
+    .actor = {
+      "process": {
+        "pid":  to_int(event_data.ProcessId) ?? null,
+        "name": to_string(event_data.Image) ?? null
+      }
+    }
+    .module = {
+      "name": to_string(event_data.ImageLoaded) ?? null,
+      "hashes": [
+        { "algorithm": "SHA256", "value": sha256_value }
+      ]
+    }
+  }
+
+  if is_network {
+    .src_endpoint = {
+      "ip":       to_string(event_data.SourceIp) ?? null,
+      "port":     to_int(event_data.SourcePort) ?? null,
+      "hostname": computer
+    }
+    .dst_endpoint = {
+      "ip":       to_string(event_data.DestinationIp) ?? null,
+      "port":     to_int(event_data.DestinationPort) ?? null,
+      "hostname": to_string(event_data.DestinationHostname) ?? null
+    }
+  }
+
+  if is_dns {
+    .query = {
+      "hostname": to_string(event_data.QueryName) ?? null,
+      "type":     query_type
+    }
+  }
 '''
 
 # --- FILTER ---
@@ -155,7 +189,7 @@ condition = '.class_uid != 0'
 [transforms.sysmon_route_by_class]
 type   = "route"
 inputs = ["sysmon_filter_valid"]
-route.endpoint = '.class_uid == 1001 || .class_uid == 1003'
+route.endpoint = '.class_uid == 1007 || .class_uid == 1005'
 route.network  = '.class_uid == 4001'
 route.dns      = '.class_uid == 4003'
 

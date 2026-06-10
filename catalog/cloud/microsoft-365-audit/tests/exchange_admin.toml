@@ -25,8 +25,9 @@ extract_from = "microsoft365_audit_parse_and_normalize"
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  assert_eq!(.class_uid, 6001)
+  assert_eq!(.class_uid, 6003)
   assert_eq!(.category_uid, 6)
+  assert_eq!(.activity_id, 3)
   assert_eq!(.severity_id, 1)
   assert_eq!(.status, "Success")
   assert_eq!(.api.operation, "Set-Mailbox")

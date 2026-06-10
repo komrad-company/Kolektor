@@ -1,4 +1,5 @@
 display_name: Syslog
 default_port: 5141
-ocsf_class_uid: 6001
-ocsf_category_uid: 6
+ocsf_class_uid: 0
+ocsf_category_uid: 0
+version: 0.2.0

@@ -1,0 +1,38 @@
+[[tests]]
+name = "Windows Security — 4624 with optional fields missing (no SID, no IP, no process)"
+
+[[tests.inputs]]
+insert_at = "winevtx_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = ""
+  timestamp = "2024-04-14T10:23:45.000Z"
+
+  [tests.inputs.log_fields.winlog]
+  event_id      = 4624
+  computer_name = "DC01.corp.local"
+
+    [tests.inputs.log_fields.winlog.event_data]
+    TargetUserName    = "jdoe"
+    TargetDomainName  = "CORP"
+    SubjectUserName   = "SYSTEM"
+    SubjectDomainName = "NT AUTHORITY"
+    LogonType         = "5"
+
+[[tests.outputs]]
+extract_from = "winevtx_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3002)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.user.name, "jdoe")
+  # Dead-cast fix: a missing SID resolves to null, not "" — both branches absent.
+  assert_eq!(.user.uid, null)
+  # No NewProcessName / ProcessName present -> process.name is null, not "".
+  assert_eq!(.process.name, null)
+  assert_eq!(.unmapped.event_id, 4624)
+  assert_eq!(.logon_type_id, 5)
+'''

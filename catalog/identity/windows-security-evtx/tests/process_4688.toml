@@ -26,13 +26,48 @@ extract_from = "winevtx_parse_and_normalize"
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  assert_eq!(.class_uid, 1003)
+  assert_eq!(.class_uid, 1007)
   assert_eq!(.category_uid, 1)
+  assert_eq!(.activity_id, 1)
   assert_eq!(.severity_id, 1)
   assert_eq!(.unmapped.event_id, 4688)
   assert_eq!(.unmapped.process_name, "C:\\Windows\\System32\\cmd.exe")
+  assert_eq!(.process.name, "C:\\Windows\\System32\\cmd.exe")
   assert_eq!(.unmapped.command_line, "cmd.exe /c whoami")
   assert_eq!(.actor.user.name, "jdoe")
+'''
+
+[[tests]]
+name = "Windows Security — 4688 with ProcessName fallback (no NewProcessName)"
+
+[[tests.inputs]]
+insert_at = "winevtx_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = ""
+  timestamp = "2024-04-14T11:05:00.000Z"
+
+  [tests.inputs.log_fields.winlog]
+  event_id      = 4688
+  computer_name = "WS01.corp.local"
+
+    [tests.inputs.log_fields.winlog.event_data]
+    SubjectUserName = "jdoe"
+    ProcessName     = "C:\\Windows\\System32\\powershell.exe"
+
+# Exercises the second branch of the process_name guard: NewProcessName absent,
+# ProcessName present. The old dead `?? to_string(...)` chain never reached it.
+[[tests.outputs]]
+extract_from = "winevtx_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 1007)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.process.name, "C:\\Windows\\System32\\powershell.exe")
+  assert_eq!(.unmapped.process_name, "C:\\Windows\\System32\\powershell.exe")
 '''
 
 [[tests]]

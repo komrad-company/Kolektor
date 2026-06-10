@@ -1,0 +1,45 @@
+[[tests]]
+name = "Okta — group membership change (Account Change 3001 → identity)"
+
+[[tests.inputs]]
+insert_at = "okta_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  uuid           = "11112222-3333-4444-5555-666677778888"
+  published      = "2024-04-14T12:30:15.500Z"
+  eventType      = "group.user_membership.add"
+  severity       = "INFO"
+  displayMessage = "Add user to group membership"
+
+  [tests.inputs.log_fields.actor]
+  id          = "00uadmin"
+  type        = "User"
+  alternateId = "admin@corp.com"
+  displayName = "Admin User"
+
+  [tests.inputs.log_fields.outcome]
+  result = "SUCCESS"
+
+[[tests.outputs]]
+extract_from = "okta_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3001)
+  assert_eq!(.category_uid, 3)
+  assert_eq!(.activity_id, 99)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.status_id, 1)
+  assert_eq!(.actor.user.name, "admin@corp.com")
+'''
+
+[[tests.outputs]]
+extract_from = "okta_route_by_class.identity"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 3001)
+'''

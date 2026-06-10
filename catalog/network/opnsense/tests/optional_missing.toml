@@ -1,0 +1,32 @@
+[[tests]]
+name = "OPNsense filterlog — pass ICMP IPv4 (no transport ports)"
+
+[[tests.inputs]]
+insert_at = "opnsense_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message   = "1,,,abc,igc0,match,pass,in,4,0x0,,64,1236,0,none,1,icmp,84,10.0.0.1,8.8.8.8"
+  timestamp = "2024-04-14T10:24:00Z"
+  hostname  = "fw1"
+  appname   = "filterlog"
+
+[[tests.outputs]]
+extract_from = "opnsense_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4001)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.activity_id, 6)
+  assert_eq!(.action, "Allow")
+  assert_eq!(.action_id, 1)
+  assert_eq!(.src_endpoint.ip, "10.0.0.1")
+  assert_eq!(.dst_endpoint.ip, "8.8.8.8")
+  assert_eq!(.src_endpoint.port, null)
+  assert_eq!(.dst_endpoint.port, null)
+  assert_eq!(.connection_info.protocol_name, "icmp")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

@@ -1,0 +1,46 @@
+[[tests]]
+name = "Google Workspace — activity with no events falls back to raw-logs"
+
+[[tests.inputs]]
+insert_at = "google_workspace_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  kind      = "admin#reports#activity"
+  ipAddress = "1.2.3.4"
+
+  [tests.inputs.log_fields.id]
+  time            = "2024-04-14T10:23:45.123Z"
+  uniqueQualifier = "-12345"
+  applicationName = "login"
+  customerId      = "C01"
+
+  [tests.inputs.log_fields.actor]
+  email = "jdoe@corp.com"
+
+[[tests.outputs]]
+extract_from = "google_workspace_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.category_uid, 0)
+  assert!(exists(.raw))
+'''
+
+[[tests.outputs]]
+extract_from = "google_workspace_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "identity/google-workspace")
+  assert_eq!(.parser, "google-workspace")
+  assert_eq!(.parse_error, "google_workspace_activity_shape_invalid")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+  assert!(exists(.tenant_id))
+  assert!(exists(.datasource_id))
+'''

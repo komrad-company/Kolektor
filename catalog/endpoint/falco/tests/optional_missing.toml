@@ -1,0 +1,36 @@
+[[tests]]
+name = "Falco — Critical alert, optional fields absent"
+
+# Real Falco events can omit output_fields, tags and hostname depending on the
+# falcosidekick build and the rule definition. Only output/priority/rule/time
+# are guaranteed.
+[[tests.inputs]]
+insert_at = "falco_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  output   = "08:15:30.500000000: Critical Disallowed SSH Connection (connection=10.0.0.5:54321->10.0.0.1:22)"
+  priority = "Critical"
+  rule     = "Disallowed SSH Connection"
+  time     = "2024-05-01T08:15:30.500000000Z"
+  source   = "syscall"
+
+[[tests.outputs]]
+extract_from = "falco_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 2001)
+  assert_eq!(.category_uid, 2)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.severity_id, 5)
+  assert_eq!(.time, 1714551330500)
+  assert_eq!(.finding_info.title, "Disallowed SSH Connection")
+  assert_eq!(.finding_info.types, [])
+  assert_eq!(.src_endpoint.hostname, null)
+  assert_eq!(.unmapped.output_fields, {})
+  assert_eq!(.metadata.product.name, "Falco")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

@@ -1,3 +1,4 @@
 display_name: Cloudflare HTTP Requests
 ocsf_class_uid: 4002
 ocsf_category_uid: 4
+version: 0.1.0

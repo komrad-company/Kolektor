@@ -1,0 +1,45 @@
+[[tests]]
+name = "Sysmon — Event 7 Image/Module Loaded"
+
+[[tests.inputs]]
+insert_at = "sysmon_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = ""
+  "@timestamp" = "2024-04-14T10:24:00.000Z"
+
+  [tests.inputs.log_fields.agent]
+  type = "winlogbeat"
+
+  [tests.inputs.log_fields.winlog]
+  event_id      = 7
+  computer_name = "WS01.corp.local"
+
+    [tests.inputs.log_fields.winlog.event_data]
+    UtcTime     = "2024-04-14 10:24:00.000"
+    ProcessId   = "4567"
+    Image       = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+    ImageLoaded = "C:\\Windows\\System32\\amsi.dll"
+    Hashes      = "SHA256=DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF,MD5=00112233445566778899AABBCCDDEEFF"
+    ProcessGuid = "{12345678-abcd-ef01-2345-6789abcdef01}"
+
+[[tests.outputs]]
+extract_from = "sysmon_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 1005)
+  assert_eq!(.category_uid, 1)
+  assert_eq!(.activity_id, 99)
+  assert_eq!(.module.name, "C:\\Windows\\System32\\amsi.dll")
+  assert_eq!(.module.hashes[0].algorithm, "SHA256")
+  assert_eq!(.module.hashes[0].value, "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
+  assert_eq!(.actor.process.name, "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")
+  assert_eq!(.unmapped.event_id, 7)
+  # No process/network/dns substructure on a module event.
+  assert!(!exists(.process))
+  assert!(!exists(.src_endpoint))
+  assert!(!exists(.query))
+'''

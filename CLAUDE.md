@@ -44,8 +44,9 @@ kolektor/
 - `python3 ci/catalog_index.py --check`
 - `vector validate` on each `vector.toml` with dummy env vars injected by `ci/validate.sh`
 - `vector test` on each source (vector.toml + tests/*.toml merged)
+- `python3 ci/lint_vrl.py` (VRL antipatterns) + `python3 ci/validate_ocsf.py` (OCSF enum/category coherence)
 - Markdown report as CI artifact
-- CI image: `timberio/vector:0.54.0-debian`
+- CI image: `timberio/vector:0.55.0-debian`
 - SAST: gitleaks + hadolint + grype (see `docs/CI.md`)
 
 ## Known pitfalls

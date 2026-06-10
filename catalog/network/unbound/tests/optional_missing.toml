@@ -20,6 +20,7 @@ extract_from = "unbound_parse_and_normalize"
 type   = "vrl"
 source = '''
   assert_eq!(.class_uid, 4003)
+  assert_eq!(.activity_id, 1)
   assert_eq!(.query.hostname, "ipv6.google.com")
   assert_eq!(.query.type, "AAAA")
   assert_eq!(.query.class, "IN")

@@ -1,0 +1,43 @@
+[[tests]]
+name = "CrowdSec — remediation true, non-blocking decision (Medium)"
+
+[[tests.inputs]]
+insert_at = "crowdsec_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  scenario         = "crowdsecurity/http-crawl-non_statics"
+  scenario_hash    = "1a2b3c4d5e6f7081928374655647382a"
+  scenario_version = "0.2"
+  message          = "Ip 9.9.9.9 performed 'crowdsecurity/http-crawl-non_statics' (40 events over 1m)"
+  events_count     = 40
+  remediation      = true
+  start_at         = "2024-04-14T13:15:30Z"
+  stop_at          = "2024-04-14T13:16:30Z"
+
+  [tests.inputs.log_fields.source]
+  scope   = "Ip"
+  value   = "9.9.9.9"
+  ip      = "9.9.9.9"
+  cn      = "DE"
+  as_name = "EXAMPLE-DE-AS"
+
+  [[tests.inputs.log_fields.decisions]]
+  type     = "throttle"
+  scope    = "Ip"
+  value    = "9.9.9.9"
+  duration = "15m"
+  origin   = "crowdsec"
+  scenario = "crowdsecurity/http-crawl-non_statics"
+
+[[tests.outputs]]
+extract_from = "crowdsec_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 2001)
+  assert_eq!(.severity_id, 3)
+  assert_eq!(.unmapped.decision_type, "throttle")
+  assert_eq!(.src_endpoint.location.country, "DE")
+'''

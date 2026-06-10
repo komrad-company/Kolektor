@@ -18,9 +18,11 @@ extract_from = "syslog_parse_and_normalize"
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  assert_eq!(.class_uid, 6001)
-  assert_eq!(.actor.process.name, "kernel")
-  assert_eq!(.src_endpoint.hostname, "srv01")
+  assert_eq!(.class_uid, 0)
+  assert_eq!(.category_uid, 0)
   assert_eq!(.severity_id, 2)
+  assert_eq!(.parse_status, "parsed")
+  assert!(contains(string!(.raw), "kernel"))
+  assert!(contains(string!(.raw), "srv01"))
   assert!(exists(.raw))
 '''

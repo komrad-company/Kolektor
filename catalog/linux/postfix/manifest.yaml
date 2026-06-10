@@ -1,0 +1,5 @@
+display_name: Postfix
+default_port: 5146
+ocsf_class_uid: 4009
+ocsf_category_uid: 4
+version: 0.1.0

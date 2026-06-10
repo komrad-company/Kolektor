@@ -1,0 +1,8 @@
+display_name: Microsoft Defender for Endpoint
+default_port: 8521
+ocsf_outputs:
+  - class_uid: 2001
+    category_uid: 2
+    index: ocsf-endpoint
+    route: endpoint
+version: 0.1.0

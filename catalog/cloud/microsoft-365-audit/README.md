@@ -2,7 +2,7 @@
 
 ## Description
 
-Normalise les evenements Microsoft 365 Unified Audit vers OCSF 6001 API Activity.
+Normalise les evenements Microsoft 365 Unified Audit vers OCSF 6003 API Activity.
 
 Le parser expose un endpoint HTTP sur `${LISTEN_PORT:-8517}`. Le fetcher external
 POST du NDJSON (un objet JSON par ligne) sur cet endpoint. Kolektor n'impose

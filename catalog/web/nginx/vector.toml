@@ -50,9 +50,14 @@ source = '''
     # Severity based on HTTP status
     ocsf_severity = if status_code >= 500 { 4 } else if status_code >= 400 { 2 } else { 1 }
 
+    # OCSF 4002 activity_id from HTTP method (pre-computed: no if in object literal)
+    method_upper = upcase(method) ?? ""
+    activity_id = if method_upper == "GET" { 3 } else if method_upper == "POST" { 6 } else if method_upper == "PUT" { 7 } else if method_upper == "DELETE" { 2 } else if method_upper == "HEAD" { 4 } else if method_upper == "OPTIONS" { 5 } else if method_upper == "PATCH" { 9 } else if method_upper == "CONNECT" { 1 } else if method_upper == "TRACE" { 8 } else { 99 }
+
     .class_uid    = 4002
     .category_uid = 4
     .severity_id  = ocsf_severity
+    .activity_id  = activity_id
     .time         = ts
 
     .http_request = {

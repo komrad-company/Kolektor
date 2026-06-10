@@ -14,9 +14,11 @@ extract_from = "auditd_parse_and_normalize"
 [[tests.outputs.conditions]]
 type   = "vrl"
 source = '''
-  assert_eq!(.class_uid, 1003)
+  assert_eq!(.class_uid, 1007)
   assert_eq!(.category_uid, 1)
   assert_eq!(.severity_id, 1)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.activity_name, "Launch")
   assert_eq!(.actor.process.pid, 5678)
   assert_eq!(.actor.process.name, "passwd")
   assert_eq!(.actor.user.uid, "0")

@@ -1,0 +1,68 @@
+[[tests]]
+name = "CrowdStrike — NetworkContainmentEvent (host contained)"
+
+[[tests.inputs]]
+insert_at = "crowdstrike_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"metadata":{"eventType":"NetworkContainmentEvent","eventCreationTime":1713091600000,"customerIDString":"abc123","eventId":"evt-003","offset":42,"version":"1.0"},"SeverityName":"Medium","ComputerName":"WS01","SensorId":"sensor-7f3a","aid":"7f3a9c2e","aip":"203.0.113.10","LocalIP":"10.0.0.50","RemoteIP":"198.51.100.23","RemotePort":443,"LocalPort":51514,"ContainmentState":"contained","FalconHostLink":"https://falcon.crowdstrike.com/hosts/sensor-7f3a"}'
+
+[[tests.outputs]]
+extract_from = "crowdstrike_route_by_class.network"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4001)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.activity_id, 6)
+  assert_eq!(.severity_id, 3)
+  assert_eq!(.src_endpoint.ip, "10.0.0.50")
+  assert_eq!(.src_endpoint.hostname, "WS01")
+  assert_eq!(.dst_endpoint.ip, "198.51.100.23")
+  assert_eq!(.dst_endpoint.port, 443)
+  assert_eq!(.time, 1713091600000)
+  assert_eq!(.unmapped.event_type, "NetworkContainmentEvent")
+  assert_eq!(.metadata.product.vendor_name, "CrowdStrike")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''
+
+[[tests]]
+name = "CrowdStrike — NetworkDetection missing optional fields (fallback keeps mandatory fields)"
+
+[[tests.inputs]]
+insert_at = "crowdstrike_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message = '{"metadata":{"eventType":"NetworkDetection","eventCreationTime":1713091700000,"customerIDString":"abc123","eventId":"evt-004"},"aip":"203.0.113.10"}'
+
+[[tests.outputs]]
+extract_from = "crowdstrike_route_by_class.network"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  # Mandatory OCSF fields stay set even though every optional CrowdStrike
+  # field is absent — the missing-field fallbacks must never null them.
+  assert_eq!(.class_uid, 4001)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.activity_id, 6)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.time, 1713091700000)
+  assert!(exists(.tenant_id))
+  assert!(exists(.datasource_id))
+  assert_eq!(.metadata.product.vendor_name, "CrowdStrike")
+  assert_eq!(.metadata.uid, "evt-004")
+  assert_eq!(.unmapped.event_type, "NetworkDetection")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+  # `aip` is the only network field present — the LocalIP→aip cascade resolves
+  # to it; absent endpoint fields coerce to "" / 0, not a hard null.
+  assert_eq!(.src_endpoint.ip, "203.0.113.10")
+  assert_eq!(.src_endpoint.hostname, "")
+  assert_eq!(.dst_endpoint.ip, "")
+  assert_eq!(.dst_endpoint.port, 0)
+'''

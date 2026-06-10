@@ -63,10 +63,12 @@ source = '''
   ocsf_severity = if is_failure { 3 } else { 1 }
 
   status = if is_success { "Success" } else if is_failure { "Failure" } else { "Other" }
-  status_id = if is_success { 1 } else if is_failure { 2 } else { 0 }
+  status_id = if is_success { 1 } else if is_failure { 2 } else { 99 }
 
-  activity = if is_ssh_accept || is_ssh_fail || is_ssh_invalid { "Logon" } else if is_sudo { "Privilege Escalation" } else { "Other" }
-  activity_id = if is_ssh_accept || is_ssh_fail || is_ssh_invalid { 1 } else if is_sudo { 5 } else { 0 }
+  # SSH login → 1 (Logon). sudo privilege escalation has no slot in the
+  # Authentication 3002 activity_id enum (1 Logon..7 Account Switch) → 99 (Other).
+  activity = if is_ssh_accept || is_ssh_fail || is_ssh_invalid { "Logon" } else if is_sudo { "Other" } else { "Other" }
+  activity_id = if is_ssh_accept || is_ssh_fail || is_ssh_invalid { 1 } else if is_sudo { 99 } else { 99 }
 
   if valid {
     .class_uid     = 3002

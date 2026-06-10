@@ -23,6 +23,7 @@ source = '''
   assert_eq!(.status, "Success")
   assert_eq!(.status_id, 1)
   assert_eq!(.activity_name, "Logon")
+  assert_eq!(.activity_id, 1)
   assert_eq!(.actor.user.name, "deploy")
   assert_eq!(.src_endpoint.ip, "10.0.0.5")
   assert_eq!(.src_endpoint.port, 54321)

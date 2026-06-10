@@ -1,0 +1,90 @@
+[[tests]]
+name = "postfix — smtp delivery sent (from/to/relay/status)"
+
+[[tests.inputs]]
+insert_at = "postfix_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message  = "smtp[2012]: A1B2C3: to=<rcpt@example.org>, relay=mx.example.org[5.6.7.8]:25, delay=0.5, status=sent (250 2.0.0 OK)"
+  appname  = "postfix/smtp"
+  hostname = "mail01"
+  procid   = "2012"
+
+[[tests.outputs]]
+extract_from = "postfix_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4009)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.email.to, "rcpt@example.org")
+  assert_eq!(.smtp_status, "sent")
+  assert_eq!(.relay, "mx.example.org[5.6.7.8]:25")
+  assert!(exists(.time))
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''
+
+[[tests]]
+name = "postfix — qmgr queue from line (from/size)"
+
+[[tests.inputs]]
+insert_at = "postfix_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message  = "qmgr[2011]: A1B2C3: from=<sender@example.com>, size=1024, nrcpt=1 (queue active)"
+  appname  = "postfix/qmgr"
+  hostname = "mail01"
+  procid   = "2011"
+
+[[tests.outputs]]
+extract_from = "postfix_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4009)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.severity_id, 1)
+  assert_eq!(.activity_id, 1)
+  assert_eq!(.email.from, "sender@example.com")
+  assert_eq!(.email.size, 1024)
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''
+
+[[tests]]
+name = "postfix — smtpd reject NOQUEUE (client + from/to)"
+
+[[tests.inputs]]
+insert_at = "postfix_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  message  = "smtpd[2013]: NOQUEUE: reject: RCPT from unknown[9.9.9.9]: 554 5.7.1 Service unavailable; from=<x@y.com> to=<z@w.com>"
+  appname  = "postfix/smtpd"
+  hostname = "mail01"
+  procid   = "2013"
+
+[[tests.outputs]]
+extract_from = "postfix_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 4009)
+  assert_eq!(.category_uid, 4)
+  assert_eq!(.severity_id, 3)
+  assert_eq!(.activity_id, 99)
+  assert_eq!(.email.from, "x@y.com")
+  assert_eq!(.email.to, "z@w.com")
+  assert_eq!(.src_endpoint.ip, "9.9.9.9")
+  assert_eq!(.src_endpoint.hostname, "unknown")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+'''

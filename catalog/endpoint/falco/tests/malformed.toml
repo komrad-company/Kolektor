@@ -1,0 +1,38 @@
+[[tests]]
+name = "Falco — payload with no rule field (invalid)"
+
+# A POST body that is not a Falco alert (no `rule`) must not produce an OCSF
+# event: it is routed to raw-logs with parse_status = "failed".
+[[tests.inputs]]
+insert_at = "falco_parse_and_normalize"
+type      = "log"
+
+  [tests.inputs.log_fields]
+  output   = "Some health probe payload"
+  priority = "Debug"
+  time     = "2024-05-01T09:00:00.000000000Z"
+
+[[tests.outputs]]
+extract_from = "falco_parse_and_normalize"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.class_uid, 0)
+'''
+
+[[tests.outputs]]
+extract_from = "falco_raw_failed"
+
+[[tests.outputs.conditions]]
+type   = "vrl"
+source = '''
+  assert_eq!(.parse_status, "failed")
+  assert_eq!(.source_type, "endpoint/falco")
+  assert_eq!(.parser, "falco")
+  assert_eq!(.parse_error, "falco_rule_missing")
+  assert!(exists(.raw))
+  assert!(exists(.uid))
+  assert!(exists(.tenant_id))
+  assert!(exists(.datasource_id))
+'''
