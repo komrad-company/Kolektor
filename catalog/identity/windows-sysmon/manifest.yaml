@@ -17,3 +17,4 @@ ocsf_outputs:
     category_uid: 4
     index: ocsf-dns
     route: dns
+version: 0.1.0

@@ -2,3 +2,4 @@ display_name: Syslog
 default_port: 5141
 ocsf_class_uid: 6001
 ocsf_category_uid: 6
+version: 0.1.0

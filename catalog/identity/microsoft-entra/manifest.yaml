@@ -9,3 +9,4 @@ ocsf_outputs:
     category_uid: 6
     index: ocsf-audit
     route: audit
+version: 0.1.0

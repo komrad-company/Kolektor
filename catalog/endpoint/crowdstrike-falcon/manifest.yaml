@@ -13,3 +13,4 @@ ocsf_outputs:
     category_uid: 4
     index: ocsf-network
     route: network
+version: 0.1.0

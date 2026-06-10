@@ -2,3 +2,4 @@ display_name: Unbound DNS (OPNsense)
 default_port: 5145
 ocsf_class_uid: 4003
 ocsf_category_uid: 4
+version: 0.1.0

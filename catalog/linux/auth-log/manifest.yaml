@@ -2,3 +2,4 @@ display_name: Auth Log
 default_port: 5142
 ocsf_class_uid: 3002
 ocsf_category_uid: 3
+version: 0.1.0

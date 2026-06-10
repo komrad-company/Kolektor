@@ -61,6 +61,7 @@ def parser_entry(source_dir: Path) -> dict[str, Any]:
     return {
         "source_type": source_type,
         "display_name": manifest["display_name"],
+        "version": manifest.get("version"),
         "category": category,
         "default_port": manifest.get("default_port"),
         "ocsf_index": ", ".join(indexes) if indexes else None,

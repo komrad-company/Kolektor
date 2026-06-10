@@ -13,3 +13,4 @@ ocsf_outputs:
     category_uid: 1
     index: ocsf-endpoint
     route: endpoint
+version: 0.1.0

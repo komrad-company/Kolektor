@@ -1,3 +1,4 @@
 display_name: Kubernetes Audit
 ocsf_class_uid: 6003
 ocsf_category_uid: 6
+version: 0.1.0

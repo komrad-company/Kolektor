@@ -2,3 +2,4 @@ display_name: Opnsense
 default_port: 5140
 ocsf_class_uid: 4001
 ocsf_category_uid: 4
+version: 0.1.0
